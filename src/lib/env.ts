@@ -37,6 +37,8 @@ export type AppEnv = {
     TELEGRAM_BOT_TOKEN: string;
     TELEGRAM_CHAT_ID: string;
 
+    DEEPL_API_KEY: string;
+
     CLICK_SELECTOR?: string;
     CLICK_INDEX: number;                 // по какому из .mc-drawer__btn кликать
     CLICK_POLL_SECONDS: number;          // сколько секунд опрашивать кнопку
@@ -47,6 +49,8 @@ export type AppEnv = {
     LATEST_PICK: 'first' | 'last';
     OFFSET_FROM_END: number;
     ROOT_SELECTOR: string;
+
+    CHECK_LAST_N: number;                // ограничение количества проверяемых последних новостей
 
     // Master switch to enable/disable all browser debugging related features
     DEBUG_BROWSER: boolean;
@@ -71,6 +75,8 @@ export function readAppEnv(): AppEnv {
         TELEGRAM_BOT_TOKEN: env('TELEGRAM_BOT_TOKEN'),
         TELEGRAM_CHAT_ID: env('TELEGRAM_CHAT_ID'),
 
+        DEEPL_API_KEY: env('DEEPL_API_KEY'),
+
         CLICK_SELECTOR: env('CLICK_SELECTOR', false) || undefined,
         CLICK_INDEX: Number(env('CLICK_INDEX', false) || '0'),
         CLICK_POLL_SECONDS: Number(env('CLICK_POLL_SECONDS', false) || '10'),
@@ -81,6 +87,8 @@ export function readAppEnv(): AppEnv {
         LATEST_PICK: ((env('LATEST_PICK', false) || 'first').toLowerCase() as 'first' | 'last'),
         OFFSET_FROM_END: Number(env('OFFSET_FROM_END', false) || '1'),
         ROOT_SELECTOR: (env('ROOT_SELECTOR', false) || '.mc-feed_open').trim(),
+
+        CHECK_LAST_N: Math.max(1, Number(env('CHECK_LAST_N', false) || '5')),
 
         DEBUG_BROWSER: (env('DEBUG_BROWSER', false) === '1'),
         DEBUG_HEADFUL: (env('DEBUG_HEADFUL', false) === '1'),

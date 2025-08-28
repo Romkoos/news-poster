@@ -1,20 +1,4 @@
 // src/index.ts
-// Главная точка входа приложения.
-// Задача: открыть сайт, найти последнюю новость, извлечь текст и медиа, перевести и отправить в Telegram.
-//
-// Ключевые этапы конвейера:
-// 1) Чтение конфигурации из .env (см. src/lib/env.ts) и логирование параметров запуска.
-// 2) Подъём браузера Playwright (см. src/lib/browser.ts) с опциональными фичами дебага:
-//    - headful/devtools/video/trace/визуальные оверлеи/скриншоты.
-// 3) (Опционально) Поллинг-клик по кнопке, чтобы раскрыть ленту/контейнер с новостями.
-// 4) Ожидание появления корневого контейнера и выбор нужной текстовой ноды (см. src/lib/scrape.ts).
-// 5) Дедупликация по SHA‑1 хешу текста (см. src/lib/hash.ts, src/lib/cache.ts).
-// 6) Поиск медиа (картинка/видео) относительно корня сообщения (см. src/lib/media.ts).
-// 7) Перевод he → en → ru (см. src/translate.ts) и лёгкий пост‑процессинг.
-// 8) Отправка в Telegram: видео/фото/текст (см. src/telegram.ts).
-// 9) Закрытие браузера, финализация трейсинга/видео при необходимости.
-//
-// Важно: любая отладка и «шумные» фичи управляются переменными окружения, чтобы их легко включать/выключать.
 import './ort-silence';
 import { readAppEnv } from './lib/env';
 import { log } from './lib/logger';
@@ -26,6 +10,13 @@ import { debugScreenshot } from './lib/debug';
 import { extractImageUrl, extractVideoUrl } from './lib/media';
 import { heToRu } from './translate';
 import { sendPlain, sendPhoto, sendVideo } from './telegram';
+
+type QueueItem = {
+    index: number;
+    handle: any;      // ElementHandle<Element>
+    textHe: string;
+    hash: string;
+};
 
 async function main() {
     const env = readAppEnv();
@@ -41,27 +32,19 @@ async function main() {
         WAIT_AFTER_CLICK_MS: env.WAIT_AFTER_CLICK_MS,
         LATEST_PICK: env.LATEST_PICK,
         OFFSET_FROM_END: env.OFFSET_FROM_END,
+        CHECK_LAST_N: env.CHECK_LAST_N,
         TELEGRAM_CHAT_ID: env.TELEGRAM_CHAT_ID,
     });
 
-    const debugOn = !!env.DEBUG_BROWSER;
-    const dbgHeadful = debugOn && env.DEBUG_HEADFUL;
-    const dbgDevtools = debugOn && env.DEBUG_DEVTOOLS;
-    const dbgRecordVideo = debugOn && env.DEBUG_RECORD_VIDEO;
-    const dbgTrace = debugOn && env.DEBUG_TRACE;
-    const dbgScreenshots = debugOn && env.DEBUG_SCREENSHOTS;
-    const dbgVisuals = debugOn && env.DEBUG_VISUALS;
-
     const { ctx, page } = await bootAndOpen(env.TARGET_URL, {
-        headful: dbgHeadful,
-        devtools: dbgDevtools,
-        recordVideo: dbgRecordVideo,
-        trace: dbgTrace,
-        visualOverlay: dbgVisuals,
+        headful: env.DEBUG_HEADFUL,
+        devtools: env.DEBUG_DEVTOOLS,
+        recordVideo: env.DEBUG_RECORD_VIDEO,
+        trace: env.DEBUG_TRACE,
     });
 
     try {
-        // === ЭТАП КЛИКА С ПОЛЛИНГОМ ===
+        // 1) Клик по дроверу с опросом (если нужен)
         if (env.CLICK_SELECTOR) {
             const clicked = await clickWithPolling(page, env.CLICK_SELECTOR, {
                 nth: env.CLICK_INDEX,
@@ -70,82 +53,105 @@ async function main() {
                 waitAfterClickSelector: env.ROOT_SELECTOR,
                 waitAfterClickMs: env.WAIT_AFTER_CLICK_MS,
             });
-
-            // Если не нашли/не кликнули за отведённое время — СКИПАЕМ ВЕСЬ РАН
             if (!clicked) {
                 log('Click target not found within time budget. Skipping the run.');
                 return;
             }
         }
 
-        // На всякий случай: если клик выключен, но корень рендерится сам — дождёмся корня
+        // 2) Дождаться корень
         await waitRoot(page, env.ROOT_SELECTOR, env.WAIT_FOR);
 
-        // Текстовая нода
-        const { pick } = await pickTextNode(page, env.ROOT_SELECTOR, env.LATEST_PICK, env.OFFSET_FROM_END);
+        // 3) Получить список элементов (items[0] — самый свежий)
+        const { items } = await pickTextNode(page, env.ROOT_SELECTOR, 'first', 0);
 
-        await debugScreenshot(page, 'picked-before-extract', dbgScreenshots);
+        // Ограничим сканирование CHECK_LAST_N
+        const scanCount = Math.min(env.CHECK_LAST_N, items.length);
+        log(`Scan last N: ${scanCount} (from total ${items.length})`);
 
-        const textHe = await extractTextFrom(pick);
-        log('Text length:', textHe?.length ?? 0);
-        log('Text preview:', (textHe || '').slice(0, 140));
-        if (!textHe) throw new Error('Empty text node');
-
-        // Дедуп
-        const hash = sha1(textHe);
-        log('Text hash:', hash);
+        // 4) Сформировать очередь к обработке до первого совпадения с кэшем
         const cache = await readCache();
-        if (cache.lastHash === hash) {
-            log('No new item. Skip by hash match.');
+        const lastHash = cache.lastHash || null;
+
+        const toProcess: QueueItem[] = [];
+        for (let i = 0; i < scanCount; i++) {
+            const handle = items[i];
+            const textHe = await extractTextFrom(handle);
+            const hash = sha1(textHe);
+
+            // если встретили закешированное — прекращаем набор очереди
+            if (lastHash && hash === lastHash) {
+                log(`Hit cache boundary at index ${i}; stopping collection.`);
+                break;
+            }
+
+            // добавляем в очередь новый элемент
+            toProcess.push({ index: i, handle, textHe, hash });
+        }
+
+        log(`Collected toProcess size: ${toProcess.length}`);
+        if (toProcess.length === 0) {
+            log('No new items. Nothing to post.');
             return;
         }
 
-        // Медиа
-        const messageRoot = await findMessageRoot(pick);
-        const [imgUrl, videoUrlCandidate] = await Promise.all([
-            extractImageUrl(messageRoot),
-            extractVideoUrl(page, messageRoot, { visuals: dbgVisuals, screenshots: dbgScreenshots }),
-        ]);
-        await debugScreenshot(page, 'after-media-probe', dbgScreenshots);
+        // 5) Публикуем ОТ СТАРЫХ К НОВЫМ (реверс массива)
+        // Обновлять кэш будем значением ПОСЛЕДНЕГО успешно опубликованного хэша
+        let lastPostedHash: string | null = null;
 
-        // Перевод
-        log('Start translation he→en→ru…');
-        const t0 = Date.now();
-        const textRu = await heToRu(textHe);
-        log('Translation done in ms:', Date.now() - t0);
-        log('Translation preview:', (textRu || '').slice(0, 140));
+        for (let qi = toProcess.length - 1; qi >= 0; qi--) {
+            const q = toProcess[qi];
+            log(`[${toProcess.length - qi}/${toProcess.length}] Start process index=${q.index}, preview="${q.textHe.slice(0, 80)}"`);
 
-        // Отправка
-        const videoUrl = videoUrlCandidate && /\.m3u8(\?|#|$)/i.test(videoUrlCandidate) ? null : videoUrlCandidate;
-        log('videoUrl:', videoUrl ?? '<none>');
-        log('imgUrl:', imgUrl ?? '<none>');
+            try {
+                // Найти message root для текущей карточки
+                const messageRoot = await findMessageRoot(q.handle);
 
-        // РАЗКОММЕНТИРУЙ, когда будешь готовы слать в канал:
-        try {
-          if (videoUrl) {
-            log('Sending VIDEO with caption…', { videoUrl, captionLen: textRu.length });
-            await sendVideo(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, videoUrl, textRu);
-            log('sendVideo OK');
-          } else if (imgUrl) {
-            log('Sending PHOTO with caption…', { imgUrl, captionLen: textRu.length });
-            await sendPhoto(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, imgUrl, textRu);
-            log('sendPhoto OK');
-          } else {
-            log('Sending PLAIN text…', { textLen: textRu.length });
-            await sendPlain(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, textRu);
-            log('sendPlain OK');
-          }
-        } catch (e) {
-          log('Telegram send error:', e);
-          throw e;
+                // Извлечь медиа (картинка/видео)
+                const [imgUrl, videoUrlCandidate] = await Promise.all([
+                    extractImageUrl(messageRoot),
+                    extractVideoUrl(page, messageRoot),
+                ]);
+
+                await debugScreenshot(page, `after-media-probe-${q.index}`, env.DEBUG_SCREENSHOTS);
+
+                // Перевести текст (he→ru)
+                const t0 = Date.now();
+                const textRu = await heToRu(q.textHe);
+                log(`[${toProcess.length - qi}/${toProcess.length}] Translation ms:`, Date.now() - t0);
+
+                // Отправить: видео > фото > текст
+                const videoUrl = videoUrlCandidate && /\.m3u8(\?|#|$)/i.test(videoUrlCandidate) ? null : videoUrlCandidate;
+                log(`[${toProcess.length - qi}/${toProcess.length}] Media picked:`, { videoUrl: videoUrl ?? '<none>', imgUrl: imgUrl ?? '<none>' });
+
+                if (videoUrl) {
+                    await sendVideo(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, videoUrl, textRu);
+                    log(`[${toProcess.length - qi}/${toProcess.length}] sendVideo OK`);
+                } else if (imgUrl) {
+                    await sendPhoto(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, imgUrl, textRu);
+                    log(`[${toProcess.length - qi}/${toProcess.length}] sendPhoto OK`);
+                } else {
+                    await sendPlain(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, textRu);
+                    log(`[${toProcess.length - qi}/${toProcess.length}] sendPlain OK`);
+                }
+
+                lastPostedHash = q.hash; // фиксируем последнюю успешную публикацию
+            } catch (e) {
+                log(`[${toProcess.length - qi}/${toProcess.length}] Item failed, continue with next:`, e);
+                // продолжаем со следующей новостью
+            }
         }
 
-        await writeCache({ lastHash: hash });
-        log('Posted. Hash saved.');
+        // 6) Обновить кэш последним успешно опубликованным хэшем
+        if (lastPostedHash) {
+            await writeCache({ lastHash: lastPostedHash });
+            log('Cache updated with last posted hash:', lastPostedHash);
+        } else {
+            log('Nothing posted — cache not updated.');
+        }
     } finally {
-        await stopAndFlush(ctx, dbgTrace);
-        log('Done.');
-        process.exit(0)
+        await stopAndFlush(ctx, env.DEBUG_TRACE);
+        log('Browser closed.');
     }
 }
 
