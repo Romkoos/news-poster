@@ -1,19 +1,21 @@
 import * as deepl from 'deepl-node';
-import {readAppEnv} from "../lib/env";
+import {log} from "../lib/logger";
 
-const env = readAppEnv();
+const authKey = process.env.DEEPL_API_KEY;
 
-const authKey = env.DEEPL_API_KEY;
-const deeplClient = new deepl.Translator(authKey);
+let translator: deepl.Translator | null = null;
 
-(async () => {
-    const targetLang: deepl.TargetLanguageCode = 'ru';
-    const results = await deeplClient.translateText(
-        ['Hello, world!', 'How are you?'],
-        null,
-        targetLang,
-    );
-    results.map((result: deepl.TextResult) => {
-        console.log(result.text);
-    });
-})();
+function getTranslator(): deepl.Translator {
+    if (!authKey) throw new Error('DEEPL_API_KEY is missing');
+    if (!translator) {
+        translator = new deepl.Translator(authKey);
+        log('DeepL translator initialized.');
+    }
+    return translator;
+}
+
+export async function heToRuDeepl(text: string): Promise<string> {
+    const tr = getTranslator();
+    const result = await tr.translateText(text, 'he', 'ru');
+    return result.text.trim();
+}

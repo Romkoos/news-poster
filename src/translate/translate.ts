@@ -11,7 +11,7 @@
 // - На выходе прогоняем лёгкий пост‑процессинг терминов (например, замены «ВС Израиля» → «ЦАХАЛ»).
 //
 // ВАЖНО: модуль импортирует './ort-silence' раньше, чтобы можно было управлять уровнем логов ONNX Runtime.
-import './ort-silence'
+import '../ort-silence'
 import { pipeline } from '@xenova/transformers';
 
 // Модели (совместимы с @xenova/transformers)
