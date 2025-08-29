@@ -20,7 +20,7 @@ import { debugScreenshot, drawBBox } from "./debug";
 function parseBgUrl(bg: string | null | undefined) : string | null {
     if (!bg || bg === 'none') return null;
     const m = /url\((['"]?)(.*?)\1\)/.exec(bg);
-    return m?.[2] || null;
+    return m?.[2].replace(/270X320/, '676X800') || null;
 }
 
 /**
