@@ -19,20 +19,21 @@ import { log } from './logger';
  * Возвращает true при успешном клике, иначе false.
  * Ошибки внутри попыток клика логируются и не прерывают цикл до дедлайна.
  */
+
 export async function clickWithPolling(
     page: Page,
     selector: string,
     opts: {
         nth?: number;
-        totalMs?: number;               // суммарное время ожидания (по умолчанию 10_000)
+        totalMs?: number;               // общее время ожидания (по умолчанию 10_000)
         intervalMs?: number;            // шаг опроса (по умолчанию 1_000)
         waitAfterClickSelector?: string;
         waitAfterClickMs?: number;
     } = {}
 ): Promise<boolean> {
     const nth = opts.nth ?? 0;
-    const totalMs = opts.totalMs ?? 10_000;
-    const intervalMs = opts.intervalMs ?? 1_000;
+    const totalMs = opts.totalMs ?? 10000;
+    const intervalMs = opts.intervalMs ?? 1000;
     const waitAfterClickSelector = opts.waitAfterClickSelector;
     const waitAfterClickMs = opts.waitAfterClickMs ?? 0;
 
@@ -43,13 +44,19 @@ export async function clickWithPolling(
 
     while (Date.now() < deadline) {
         attempt += 1;
-        const all = page.locator(selector);
-        const count = await all.count();
+
+        let count = 0;
+        try {
+            count = await page.locator(selector).count();
+        } catch {
+            count = 0;
+        }
         log(`Click polling attempt #${attempt}. Candidates:`, count);
 
         if (count > 0) {
             const index = Math.min(Math.max(nth, 0), count - 1);
-            const loc = all.nth(index);
+            const loc = page.locator(selector).nth(index);
+
             try {
                 await loc.scrollIntoViewIfNeeded();
                 try {
@@ -72,16 +79,18 @@ export async function clickWithPolling(
                 return true;
             } catch (e) {
                 log('Click failed on attempt:', attempt, e);
-                // подождём и попробуем снова до дедлайна
             }
         }
 
-        await page.waitForTimeout(intervalMs);
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) break;
+        await page.waitForTimeout(Math.min(intervalMs, remaining));
     }
 
     log('Click polling timeout exceeded, button not found.');
     return false;
 }
+
 
 /**
  * Дождаться появления корневого контейнера ленты/карточек.
