@@ -20,6 +20,10 @@ import { log } from './logger';
  * Ошибки внутри попыток клика логируются и не прерывают цикл до дедлайна.
  */
 
+// Надёжный клик с поллингом фиксированного числа попыток.
+// Гарантирует до ceil(totalMs / intervalMs) итераций, не «съедает» бюджет.
+// Счёт элементов — через querySelectorAll с пер-итерационным таймаутом.
+
 export async function clickWithPolling(
     page: Page,
     selector: string,
@@ -32,26 +36,25 @@ export async function clickWithPolling(
     } = {}
 ): Promise<boolean> {
     const nth = opts.nth ?? 0;
-    const totalMs = opts.totalMs ?? 10000;
-    const intervalMs = opts.intervalMs ?? 1000;
+    const totalMs = opts.totalMs ?? 10_000;
+    const intervalMs = opts.intervalMs ?? 1_000;
     const waitAfterClickSelector = opts.waitAfterClickSelector;
     const waitAfterClickMs = opts.waitAfterClickMs ?? 0;
 
-    log('Click phase (polling). Selector:', selector, `totalMs=${totalMs}, intervalMs=${intervalMs}, nth=${nth}`);
+    const attemptsMax = Math.max(1, Math.ceil(totalMs / intervalMs));
+    // таймаут на определение count в каждой итерации
+    const COUNT_CAP_MS = Math.min(2000, intervalMs);
 
-    const deadline = Date.now() + totalMs;
-    let attempt = 0;
+    log(
+        'Click phase (polling). Selector:',
+        selector,
+        `totalMs=${totalMs}, intervalMs=${intervalMs}, nth=${nth}, attemptsMax=${attemptsMax}`
+    );
 
-    while (Date.now() < deadline) {
-        attempt += 1;
-
-        let count = 0;
-        try {
-            count = await page.locator(selector).count();
-        } catch {
-            count = 0;
-        }
-        log(`Click polling attempt #${attempt}. Candidates:`, count);
+    for (let attempt = 1; attempt <= attemptsMax; attempt++) {
+        // 1) считаем количество кандидатов с жёстким капом по времени
+        const count = await countWithCap(page, selector, COUNT_CAP_MS).catch(() => 0);
+        log(`Click polling attempt #${attempt}/${attemptsMax}. Candidates:`, count);
 
         if (count > 0) {
             const index = Math.min(Math.max(nth, 0), count - 1);
@@ -60,11 +63,11 @@ export async function clickWithPolling(
             try {
                 await loc.scrollIntoViewIfNeeded();
                 try {
-                    await loc.click({ timeout: 2000 });
+                    await loc.click({ timeout: 1500 });
                     log('Clicked (normal):', selector, `#${index}`);
                 } catch (e1) {
                     log('Normal click failed, try force:', e1);
-                    await loc.click({ timeout: 2000, force: true });
+                    await loc.click({ timeout: 1500, force: true });
                     log('Clicked (force):', selector, `#${index}`);
                 }
 
@@ -79,16 +82,27 @@ export async function clickWithPolling(
                 return true;
             } catch (e) {
                 log('Click failed on attempt:', attempt, e);
+                // пойдём на следующую попытку после паузы
             }
         }
 
-        const remaining = deadline - Date.now();
-        if (remaining <= 0) break;
-        await page.waitForTimeout(Math.min(intervalMs, remaining));
+        // 2) если это не последняя попытка — выдерживаем интервал
+        if (attempt < attemptsMax) {
+            await page.waitForTimeout(intervalMs);
+        }
     }
 
     log('Click polling timeout exceeded, button not found.');
     return false;
+}
+
+// Вспомогательная: безопасно получить count за не более чем capMs.
+// Используем querySelectorAll в page.evaluate, чтобы не блокироваться на locator.count().
+async function countWithCap(page: Page, selector: string, capMs: number): Promise<number> {
+    return await Promise.race<number>([
+        page.evaluate((sel) => document.querySelectorAll(sel).length, selector),
+        new Promise<number>((_, reject) => setTimeout(() => reject(new Error('count timeout')), capMs)),
+    ]).catch(() => 0);
 }
 
 

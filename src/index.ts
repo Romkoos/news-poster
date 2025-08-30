@@ -10,12 +10,14 @@ async function main() {
     const env = readAppEnv();
 
     // 1) Сначала — мобильная версия
-    try {
-        await runMobile(env);
-        log('Mobile parser completed successfully.');
-        return;
-    } catch (e) {
-        log('Mobile parser failed, fallback to WEB:', e);
+    if (env.TRY_MOBILE) {
+        try {
+            await runMobile(env);
+            log('Mobile parser completed successfully.');
+            return;
+        } catch (e) {
+            log('Mobile parser failed, fallback to WEB:', e);
+        }
     }
 
     // 2) Если мобильный не удался — пробуем WEB

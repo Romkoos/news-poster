@@ -29,6 +29,7 @@ export function env(name: string, required = true): string {
  * Флаги DEBUG_* позволяют тонко управлять поведением браузера и артефактами.
  */
 export type AppEnv = {
+    TRY_MOBILE: boolean;
     MOBILE_TARGET_URL: string;
     WEB_TARGET_URL: string;
     LIST_ITEM_SELECTOR: string;
@@ -69,6 +70,7 @@ export type AppEnv = {
  */
 export function readAppEnv(): AppEnv {
     return {
+        TRY_MOBILE: (env('TRY_MOBILE', false) === '1'),
         MOBILE_TARGET_URL: env('MOBILE_TARGET_URL'),
         WEB_TARGET_URL: env('WEB_TARGET_URL'),
         LIST_ITEM_SELECTOR: env('LIST_ITEM_SELECTOR'),

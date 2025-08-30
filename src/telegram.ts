@@ -18,11 +18,9 @@ function escapeMdV2(text: string): string {
 
 // Сформировать готовый футер (MarkdownV2)
 function buildFooter(): string {
-    const sep = escapeMdV2('---------------------------------');
-    const subscribe = escapeMdV2('Подписывайтесь');
     const label = escapeMdV2(FOOTER_TITLE);
     // URL НЕ экранируем
-    return `${sep}\n${subscribe}\n[${label}](${CHANNEL_URL})`;
+    return `\n[${label}](${CHANNEL_URL})`;
 }
 
 // Добавить футер к тексту, экранируя текст как MarkdownV2
