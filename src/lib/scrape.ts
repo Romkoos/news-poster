@@ -123,21 +123,17 @@ const TEXT_PATH = '.mc-extendable-text__content > div > div';
  */
 export async function pickTextNode(page: Page, rootSelector: string, latestPick: 'first'|'last', offsetFromEnd: number) {
     const scoped = `${rootSelector} ${TEXT_PATH}`;
-    log('Wait scopedSelector:', scoped);
     await page.waitForSelector(scoped, { timeout: 15000 });
 
     const root = await page.$(rootSelector);
-    log('Root handle present?', !!root);
     if (!root) throw new Error('Root container not found');
 
     const items = await root.$$(TEXT_PATH);
-    log('Items found inside root:', items.length);
     if (!items.length) throw new Error('News list is empty under root');
 
     // режим отладки: «first» + смещение с конца (OFFSET_FROM_END)
     const pick = latestPick === 'first' ? items[offsetFromEnd] : items[0];
     const index = latestPick === 'first' ? offsetFromEnd : 0;
-    log('Picked item index:', index);
 
     return { pick, items, index };
 }
@@ -161,22 +157,11 @@ export async function extractTextFrom(el: ElementHandle<Element>) {
  * Ищем ближайшего предка с классом .mc-message-content_open, иначе возвращаем исходный узел.
  */
 export async function findMessageRoot(el: ElementHandle<Element>) {
-    log('Find message root (.mc-message-content_open) from picked text node…');
-    const handle = await el.evaluateHandle((node) => {
+    return  await el.evaluateHandle((node) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const r = (node as any).closest?.('.mc-message-content_open');
         return r || node;
     });
-    const desc = await (async () => {
-        try {
-            const res = await (handle as any).evaluate((n: Element) => {
-                const el = n as HTMLElement;
-                return `<${el.tagName.toLowerCase()} class="${el.className || ''}">`;
-            });
-            return res;
-        } catch { return '<unknown>'; }
-    })();
-    log('Message root resolved to:', desc);
-    return handle;
+
 }
 

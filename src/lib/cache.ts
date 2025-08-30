@@ -23,11 +23,10 @@ const cachePath = path.resolve('.cache.json');
 export async function readCache(): Promise<Cache> {
     try {
         const raw = await fs.readFile(cachePath, 'utf-8');
-        const json = JSON.parse(raw);
-        log('Cache loaded:', json);
-        return json;
+        return JSON.parse(raw);
+
     } catch {
-        log('Cache not found, starting fresh');
+
         return {};
     }
 }

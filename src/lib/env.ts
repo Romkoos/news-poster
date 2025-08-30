@@ -3,8 +3,6 @@
 // Этот модуль централизует все настройки приложения: целевой сайт, селекторы, тайминги, 
 // а также флаги отладки браузера. Значения читаются из process.env и приводятся к нужным типам.
 // Если обязательная переменная отсутствует — бросаем понятную ошибку с подсказками.
-import { config } from 'dotenv';
-config(); // подхватываем .env из cwd
 
 /**
  * Прочитать переменную окружения по имени с опциональной обязательностью.
@@ -13,18 +11,17 @@ config(); // подхватываем .env из cwd
  * @param required Обязательность (по умолчанию true)
  * @returns Строковое значение или пустая строка
  */
+
+import dotenvFlow from 'dotenv-flow';
+
+dotenvFlow.config(); // сам выберет .env, .env.local и т.д.
+
 export function env(name: string, required = true): string {
     const v = process.env[name];
-    if (required && !v) {
-        const cwd = process.cwd();
-        throw new Error(
-            `Missing env: ${name}\n` +
-            `cwd: ${cwd}\n` +
-            `hint: проверь .env в корне проекта и что запуск идёт из корня`
-        );
-    }
+    if (required && !v) throw new Error(`Missing env: ${name}`);
     return v || '';
 }
+
 
 /**
  * Схема конфигурации приложения, собранная из .env.
@@ -39,16 +36,10 @@ export type AppEnv = {
 
     DEEPL_API_KEY: string;
 
-    CLICK_SELECTOR?: string;
-    CLICK_INDEX: number;                 // по какому из .mc-drawer__btn кликать
-    CLICK_POLL_SECONDS: number;          // сколько секунд опрашивать кнопку
-    CLICK_POLL_INTERVAL_MS: number;      // шаг опроса (мс)
-
-    WAIT_FOR: number;
-    WAIT_AFTER_CLICK_MS: number;
     LATEST_PICK: 'first' | 'last';
     OFFSET_FROM_END: number;
     ROOT_SELECTOR: string;
+    WAIT_FOR: number
 
     CHECK_LAST_N: number;                // ограничение количества проверяемых последних новостей
 
@@ -77,16 +68,10 @@ export function readAppEnv(): AppEnv {
 
         DEEPL_API_KEY: env('DEEPL_API_KEY'),
 
-        CLICK_SELECTOR: env('CLICK_SELECTOR', false) || undefined,
-        CLICK_INDEX: Number(env('CLICK_INDEX', false) || '0'),
-        CLICK_POLL_SECONDS: Number(env('CLICK_POLL_SECONDS', false) || '10'),
-        CLICK_POLL_INTERVAL_MS: Number(env('CLICK_POLL_INTERVAL_MS', false) || '1000'),
-
-        WAIT_FOR: Number(env('WAIT_FOR_LIST_TIMEOUT_MS', false) || '15000'),
-        WAIT_AFTER_CLICK_MS: Number(env('WAIT_AFTER_CLICK_MS', false) || '0'),
         LATEST_PICK: ((env('LATEST_PICK', false) || 'first').toLowerCase() as 'first' | 'last'),
         OFFSET_FROM_END: Number(env('OFFSET_FROM_END', false) || '1'),
         ROOT_SELECTOR: (env('ROOT_SELECTOR', false) || '.mc-feed_open').trim(),
+        WAIT_FOR: Number(env('WAIT_FOR_LIST_TIMEOUT_MS', false) || '15000'),
 
         CHECK_LAST_N: Math.max(1, Number(env('CHECK_LAST_N', false) || '5')),
 

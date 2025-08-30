@@ -10,7 +10,6 @@
 //   включаются через .env флаги (см. src/lib/env.ts) и передаются параметрами.
 import { Page, ElementHandle } from 'playwright';
 import { log } from './logger';
-import { debugScreenshot, drawBBox } from "./debug";
 
 /**
  * Вытащить URL из CSS background-image формата url("...") или url('...') или url(...).
@@ -30,7 +29,6 @@ function parseBgUrl(bg: string | null | undefined) : string | null {
  * @returns Строковый URL картинки или null, если картинка не обнаружена
  */
 export async function extractImageUrl(messageRoot: ElementHandle<Element>) : Promise<string | null> {
-    log('Try image extraction inside message root…');
     const imgProbe = await (messageRoot as any).$('.mc-content-media-item_picture');
     log('Image element found?', !!imgProbe);
     if (!imgProbe) return null;
@@ -42,10 +40,7 @@ export async function extractImageUrl(messageRoot: ElementHandle<Element>) : Pro
             const computed = getComputedStyle(el).backgroundImage;
             return inline && inline !== 'none' ? inline : computed;
         });
-        log('Raw background-image:', bg);
-        const url = parseBgUrl(bg);
-        log('Parsed image URL:', url);
-        return url;
+        return parseBgUrl(bg);
     } catch (e) {
         log('Image parse error:', e);
         return null;
@@ -96,10 +91,7 @@ export async function waitMediaFromNetwork(page: Page, timeoutMs = 12000) {
  * @returns Строковый URL видео или null, если ничего не найдено
  */
 export async function extractVideoUrl(page: Page, messageRoot: ElementHandle<Element>, opts?: { visuals?: boolean; screenshots?: boolean }) : Promise<string | null> {
-    const visuals = !!opts?.visuals;
-    const screenshots = !!opts?.screenshots;
-
-    log('Try video extraction inside message root…');
+    //TODO: simplify this function
     const vidInner = await (messageRoot as any).$('.mc-content-media-item_video');
     log('Video inner node found?', !!vidInner);
     if (!vidInner) return null;
@@ -114,14 +106,8 @@ export async function extractVideoUrl(page: Page, messageRoot: ElementHandle<Ele
             const el = node as HTMLElement;
             return `<${el.tagName.toLowerCase()} class="${el.className}">`;
         });
-        log('Video container resolved:', desc);
     } catch {}
 
-    // ► Нарисуем bbox — ты глазами увидишь, куда мы целимся
-    if (visuals) await drawBBox(page, mediaContainer, 'rgba(255,0,0,.7)');
-
-    // ► Скрин «до клика»
-    await debugScreenshot(page, 'video-before-click', screenshots);
 
     try {
         await (mediaContainer as any).evaluate((el: Element) =>
@@ -145,9 +131,6 @@ export async function extractVideoUrl(page: Page, messageRoot: ElementHandle<Ele
         log('Media container click sequence failed:', e);
         return null;
     }
-
-    // ► Скрин «после клика»
-    await debugScreenshot(page, 'video-after-click', screenshots);
 
     const netUrl = await netWait;
     if (netUrl) {
