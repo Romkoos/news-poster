@@ -2,8 +2,6 @@
 // Назначение: чистые функции для работы со страницей — ожидания, клики, выбор нод и извлечение текста.
 // Важный принцип: функции не знают о .env и не управляют браузером, только манипулируют переданным Page/Handle.
 // Это делает логику тестируемой и переиспользуемой.
-import { Page, ElementHandle } from 'playwright';
-import { log } from './logger';
 
 
 /**
@@ -20,89 +18,147 @@ import { log } from './logger';
  * Ошибки внутри попыток клика логируются и не прерывают цикл до дедлайна.
  */
 
-// Надёжный клик с поллингом фиксированного числа попыток.
-// Гарантирует до ceil(totalMs / intervalMs) итераций, не «съедает» бюджет.
-// Счёт элементов — через querySelectorAll с пер-итерационным таймаутом.
+import {Page, Locator, ElementHandle} from 'playwright';
+import { log } from './logger';
+
+async function isCenterClickable(page: Page, loc: Locator): Promise<boolean> {
+    try {
+        const box = await loc.boundingBox();
+        if (!box) return false;
+        const cx = Math.floor(box.x + box.width / 2);
+        const cy = Math.floor(box.y + box.height / 2);
+        return await page.evaluate(([x, y, el]) => {
+            const target = document.elementFromPoint(x as number, y as number);
+            return !!target && (target === el || (el as HTMLElement).contains(target));
+        }, [cx, cy, await loc.elementHandle()]);
+    } catch {
+        return false;
+    }
+}
 
 export async function clickWithPolling(
     page: Page,
     selector: string,
     opts: {
         nth?: number;
-        totalMs?: number;               // общее время ожидания (по умолчанию 10_000)
-        intervalMs?: number;            // шаг опроса (по умолчанию 1_000)
+        attemptsMax?: number;         // сколько «тиков» (по умолчанию 20)
+        intervalMs?: number;          // пауза между тиками (по умолчанию 1000)
+        totalMs?: number;             // глобальный предохранитель
+        innerRetries?: number;        // быстрых попыток внутри одного тика (по умолчанию 3)
+        perClickMs?: number;          // timeout для normal/force клика (по умолчанию 900)
+        backoffFailMs?: number;       // пауза между innerRetries (по умолчанию 150)
         waitAfterClickSelector?: string;
         waitAfterClickMs?: number;
     } = {}
 ): Promise<boolean> {
-    const nth = opts.nth ?? 0;
-    const totalMs = opts.totalMs ?? 10_000;
-    const intervalMs = opts.intervalMs ?? 1_000;
+    const attemptsMax = opts.attemptsMax ?? 20;
+    const intervalMs = opts.intervalMs ?? 1000;
+    const innerRetries = opts.innerRetries ?? 3;
+    const perClickMs = opts.perClickMs ?? 900;
+    const backoffFailMs = opts.backoffFailMs ?? 150;
     const waitAfterClickSelector = opts.waitAfterClickSelector;
     const waitAfterClickMs = opts.waitAfterClickMs ?? 0;
 
-    const attemptsMax = Math.max(1, Math.ceil(totalMs / intervalMs));
-    // таймаут на определение count в каждой итерации
-    const COUNT_CAP_MS = Math.min(2000, intervalMs);
+    // totalMs — предохранитель: если не задан, ≈ 1.5 * attemptsMax * interval
+    const totalMs = opts.totalMs ?? Math.ceil(attemptsMax * intervalMs * 1.5);
+    const deadline = Date.now() + totalMs;
 
     log(
         'Click phase (polling). Selector:',
         selector,
-        `totalMs=${totalMs}, intervalMs=${intervalMs}, nth=${nth}, attemptsMax=${attemptsMax}`
+        `totalMs=${totalMs}, intervalMs=${intervalMs}, nth=${opts.nth ?? 0}, attemptsMax=${attemptsMax}`
     );
 
     for (let attempt = 1; attempt <= attemptsMax; attempt++) {
-        // 1) считаем количество кандидатов с жёстким капом по времени
-        const count = await countWithCap(page, selector, COUNT_CAP_MS).catch(() => 0);
+        if (Date.now() >= deadline) {
+            log('Click polling global deadline hit.');
+            break;
+        }
+
+        // узнаём текущее количество кандидатов
+        let count = 0;
+        try { count = await page.locator(selector).count(); } catch { count = 0; }
         log(`Click polling attempt #${attempt}/${attemptsMax}. Candidates:`, count);
 
         if (count > 0) {
-            const index = Math.min(Math.max(nth, 0), count - 1);
-            const loc = page.locator(selector).nth(index);
-
-            try {
-                await loc.scrollIntoViewIfNeeded();
-                try {
-                    await loc.click({ timeout: 1500 });
-                    log('Clicked (normal):', selector, `#${index}`);
-                } catch (e1) {
-                    log('Normal click failed, try force:', e1);
-                    await loc.click({ timeout: 1500, force: true });
-                    log('Clicked (force):', selector, `#${index}`);
-                }
-
-                if (waitAfterClickSelector) {
-                    log('Wait after click selector:', waitAfterClickSelector);
-                    await page.waitForSelector(waitAfterClickSelector, { timeout: 5000 });
-                }
-                if (waitAfterClickMs > 0) {
-                    log('Post-click wait ms:', waitAfterClickMs);
-                    await page.waitForTimeout(waitAfterClickMs);
-                }
-                return true;
-            } catch (e) {
-                log('Click failed on attempt:', attempt, e);
-                // пойдём на следующую попытку после паузы
+            // если их два — попробуем оба; если больше — возьмём первые два
+            const tryIndexes = count >= 2 ? [0, 1] : [0];
+            // если явно задан nth — поставим его первым
+            const nth = opts.nth ?? 0;
+            if (tryIndexes.includes(nth)) {
+                tryIndexes.splice(tryIndexes.indexOf(nth), 1);
+                tryIndexes.unshift(nth);
             }
+
+            for (const idx of tryIndexes) {
+                const loc = page.locator(selector).nth(idx);
+                // внутри одного тика несколько быстрых попыток
+                for (let r = 1; r <= innerRetries; r++) {
+                    try {
+                        await loc.scrollIntoViewIfNeeded();
+
+                        // проверим, что центр не перекрыт
+                        const centerOk = await isCenterClickable(page, loc);
+                        if (!centerOk) {
+                            // небольшой сдвиг страницы — иногда помогает
+                            await page.mouse.wheel(0, 120);
+                            await page.waitForTimeout(80);
+                        }
+
+                        // normal
+                        try {
+                            await loc.click({ timeout: perClickMs });
+                            log('Clicked (normal):', selector, `#${idx}`);
+                        } catch (e1) {
+                            log('Normal click failed, try force:', e1);
+                            // force
+                            try {
+                                await loc.click({ timeout: perClickMs, force: true });
+                                log('Clicked (force):', selector, `#${idx}`);
+                            } catch (e2) {
+                                // последняя попытка — прямой el.click()
+                                const handle = await loc.elementHandle();
+                                if (handle) {
+                                    await page.evaluate((el: any) => (el as HTMLElement).click(), handle);
+                                    log('Clicked via evaluate(el.click()):', selector, `#${idx}`);
+                                } else {
+                                    log('evaluate fallback skipped: no elementHandle');
+                                }
+                            }
+                        }
+
+                        // проверяем «успех» клика
+                        if (waitAfterClickSelector) {
+                            log('Wait after click selector:', waitAfterClickSelector);
+                            try {
+                                await page.waitForSelector(waitAfterClickSelector, { timeout: 3000 });
+                            } catch {
+                                // условие не наступило — считаем попытку неуспешной и попробуем ещё
+                                throw new Error('waitAfterClickSelector timeout');
+                            }
+                        }
+                        if (waitAfterClickMs > 0) {
+                            await page.waitForTimeout(waitAfterClickMs);
+                        }
+                        return true; // клик успешен
+                    } catch (err) {
+                        log(`Click sub-attempt r=${r}/${innerRetries} on #${idx} failed:`, err);
+                        const remain = deadline - Date.now();
+                        if (remain <= 0) break;
+                        await page.waitForTimeout(Math.min(backoffFailMs, Math.max(50, remain)));
+                    }
+                }
+            }
+            // кандидаты были, но все быстрые попытки в этом тике не сработали — ждём следующий тик
         }
 
-        // 2) если это не последняя попытка — выдерживаем интервал
-        if (attempt < attemptsMax) {
-            await page.waitForTimeout(intervalMs);
-        }
+        const remain = deadline - Date.now();
+        if (remain <= 0) break;
+        await page.waitForTimeout(Math.min(intervalMs, Math.max(50, remain)));
     }
 
     log('Click polling timeout exceeded, button not found.');
     return false;
-}
-
-// Вспомогательная: безопасно получить count за не более чем capMs.
-// Используем querySelectorAll в page.evaluate, чтобы не блокироваться на locator.count().
-async function countWithCap(page: Page, selector: string, capMs: number): Promise<number> {
-    return await Promise.race<number>([
-        page.evaluate((sel) => document.querySelectorAll(sel).length, selector),
-        new Promise<number>((_, reject) => setTimeout(() => reject(new Error('count timeout')), capMs)),
-    ]).catch(() => 0);
 }
 
 

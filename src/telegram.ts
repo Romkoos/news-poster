@@ -20,7 +20,7 @@ function escapeMdV2(text: string): string {
 function buildFooter(): string {
     const label = escapeMdV2(FOOTER_TITLE);
     // URL НЕ экранируем
-    return `\n[${label}](${CHANNEL_URL})`;
+    return `[${label}](${CHANNEL_URL})`;
 }
 
 // Добавить футер к тексту, экранируя текст как MarkdownV2
