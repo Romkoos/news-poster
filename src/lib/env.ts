@@ -29,7 +29,8 @@ export function env(name: string, required = true): string {
  * Флаги DEBUG_* позволяют тонко управлять поведением браузера и артефактами.
  */
 export type AppEnv = {
-    TARGET_URL: string;
+    MOBILE_TARGET_URL: string;
+    WEB_TARGET_URL: string;
     LIST_ITEM_SELECTOR: string;
     TELEGRAM_BOT_TOKEN: string;
     TELEGRAM_CHAT_ID: string;
@@ -40,6 +41,13 @@ export type AppEnv = {
     OFFSET_FROM_END: number;
     ROOT_SELECTOR: string;
     WAIT_FOR: number
+
+    CLICK_SELECTOR?: string;
+    CLICK_INDEX: number;                 // по какому из .mc-drawer__btn кликать
+    CLICK_POLL_SECONDS: number;          // сколько секунд опрашивать кнопку
+    CLICK_POLL_INTERVAL_MS: number;      // шаг опроса (мс)
+    WAIT_AFTER_CLICK_MS: number;
+
 
     CHECK_LAST_N: number;                // ограничение количества проверяемых последних новостей
 
@@ -61,7 +69,8 @@ export type AppEnv = {
  */
 export function readAppEnv(): AppEnv {
     return {
-        TARGET_URL: env('TARGET_URL'),
+        MOBILE_TARGET_URL: env('MOBILE_TARGET_URL'),
+        WEB_TARGET_URL: env('WEB_TARGET_URL'),
         LIST_ITEM_SELECTOR: env('LIST_ITEM_SELECTOR'),
         TELEGRAM_BOT_TOKEN: env('TELEGRAM_BOT_TOKEN'),
         TELEGRAM_CHAT_ID: env('TELEGRAM_CHAT_ID'),
@@ -72,6 +81,14 @@ export function readAppEnv(): AppEnv {
         OFFSET_FROM_END: Number(env('OFFSET_FROM_END', false) || '1'),
         ROOT_SELECTOR: (env('ROOT_SELECTOR', false) || '.mc-feed_open').trim(),
         WAIT_FOR: Number(env('WAIT_FOR_LIST_TIMEOUT_MS', false) || '15000'),
+
+        CLICK_SELECTOR: env('CLICK_SELECTOR', false) || undefined,
+        CLICK_INDEX: Number(env('CLICK_INDEX', false) || '0'),
+        CLICK_POLL_SECONDS: Number(env('CLICK_POLL_SECONDS', false) || '10'),
+        CLICK_POLL_INTERVAL_MS: Number(env('CLICK_POLL_INTERVAL_MS', false) || '1000'),
+        WAIT_AFTER_CLICK_MS: Number(env('WAIT_AFTER_CLICK_MS', false) || '0'),
+
+
 
         CHECK_LAST_N: Math.max(1, Number(env('CHECK_LAST_N', false) || '5')),
 
