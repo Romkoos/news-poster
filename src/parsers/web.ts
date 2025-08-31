@@ -1,5 +1,5 @@
 // src/parsers/web.ts
-import { log } from '../lib/logger';
+import {log, logWarn} from '../lib/logger';
 import { stopAndFlush } from '../lib/browser_web';
 import { clickWithPolling, waitRoot, pickTextNode, extractTextFrom, findMessageRoot } from '../lib/scrape';
 import { extractImageUrl, extractVideoUrl } from '../lib/media';
@@ -42,9 +42,8 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
         let lastHash: string | null = null;
         try {
             lastHash = db.getLastHash();
-            log('(WEB) lastHash from DB:', lastHash ?? '<none>');
         } catch (e) {
-            log('(WEB) DB getLastHash failed, fallback to file cache:', e);
+            logWarn('(WEB) DB getLastHash failed, fallback to file cache:', e);
             const cache = await readCache().catch(() => ({ lastHash: null as string | null }));
             lastHash = cache?.lastHash ?? null;
             log('(WEB) lastHash from file cache:', lastHash ?? '<none>');
@@ -79,8 +78,8 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
             //  ДО перевода проверяем, нет ли уже такого хеша в БД (на всякий случай)
             try {
                 if (db.hasNewsHash(q.hash)) {
-                    log(`(WEB) Stop publishing by DB duplicate hash: ${q.hash} (index=${q.index})`);
-                    break; // <-- РАНЬШЕ: continue. Теперь — немедленно завершаем цикл публикации.
+                    log(`(WEB) Stop publishing by DB duplicate hash: ${q.hash} (index=${q.index}), text=${q.textHe}`);
+                    continue
                 }
             } catch (e) {
                 log('(WEB) DB hasNewsHash failed (continue anyway):', e);
@@ -89,7 +88,7 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
             try {
                 const messageRoot = await findMessageRoot(q.handle);
                 const [imgUrl, videoUrlCandidate] = await Promise.all([
-                    extractImageUrl(messageRoot),
+                    extractImageUrl(page, messageRoot),
                     extractVideoUrl(page, messageRoot),
                 ]);
 
@@ -120,19 +119,6 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
             } catch (e) {
                 log(`(WEB) Item failed, continue:`, e);
             }
-        }
-
-        if (lastPostedHash) {
-            try {
-                db.setLastHash(lastPostedHash);
-                log('(WEB) DB lastHash updated:', lastPostedHash);
-            } catch (e) {
-                log('(WEB) DB setLastHash failed, fallback to file cache:', e);
-                await writeCache({ lastHash: lastPostedHash });
-                log('(WEB) Cache updated (file):', lastPostedHash);
-            }
-        } else {
-            log('(WEB) Nothing posted — cache not updated.');
         }
 
         if (lastPostedHash) {

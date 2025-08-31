@@ -17,11 +17,32 @@ export function ts() {
     return d.toISOString().replace('T', ' ').replace('Z', '');
 }
 
-/**
- * Унифицированный логгер: печатает дату и переданные аргументы.
- * @param args Любые данные для логирования (будут переданы в console.log как есть)
- */
+
+const colors = {
+    reset: '\x1b[0m',
+    red: '\x1b[31m',
+    yellow: '\x1b[33m',
+    green: '\x1b[32m',
+    cyan: '\x1b[36m',
+};
+
+export function logInfo(...args: any[]) {
+    console.log(colors.green + ts(), '-', ...args, colors.reset);
+}
+
+export function logWarn(...args: any[]) {
+    console.log(colors.yellow + ts(), '-', ...args, colors.reset);
+}
+
+export function logError(...args: any[]) {
+    console.log(colors.red + ts(), '-', ...args, colors.reset);
+}
+
+export function logDebug(...args: any[]) {
+    console.log(colors.cyan + ts(), '-', ...args, colors.reset);
+}
+
+// Универсальный "старый" лог, если не хочется менять везде
 export function log(...args: any[]) {
-    // eslint-disable-next-line no-console
     console.log(ts(), '-', ...args);
 }

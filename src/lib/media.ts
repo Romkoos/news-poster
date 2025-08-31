@@ -1,62 +1,16 @@
 // src/lib/media.ts
-// Назначение: извлечение медиа (картинок и видео) из карточки сообщения.
-// Модуль знает, как определить URL картинки из background-image и как «поймать»
-// адрес видео (через сетевые события или по DOM‑селектору как фолбэк).
-//
-// Подход:
-// - Сначала пытаемся услышать реальные сетевые ответы .m3u8/.mp4 после клика по зоне медиа.
-// - Если не получилось — пробуем достать <source src> глобально/локально.
-// - Для отладки предусмотрены визуальные рамки и скриншоты (см. src/lib/debug.ts),
-//   включаются через .env флаги (см. src/lib/env.ts) и передаются параметрами.
+// Извлечение медиа: картинки и видео.
+// Картинка: кликаем по медиа-контейнеру, ждём появление .mc-content-media-item со style="background-image: url(...)",
+// достаём URL из style. (Отказались от parseBgUrl.)
+// Видео: как было — слушаем сеть + фолбэки по DOM.
+
 import { Page, ElementHandle } from 'playwright';
 import { log } from './logger';
 
-/**
- * Вытащить URL из CSS background-image формата url("...") или url('...') или url(...).
- * @param bg Строка background-image или null/none
- * @returns Чистый URL или null, если не найдено
- */
-function parseBgUrl(bg: string | null | undefined) : string | null {
-    if (!bg || bg === 'none') return null;
-    const m = /url\((['"]?)(.*?)\1\)/.exec(bg);
-    return m?.[2].replace(/270X320/, '676X800') || null;
-}
-
-/**
- * Попытаться извлечь URL изображения из карточки сообщения.
- * Ищем элемент с классом .mc-content-media-item_picture и берём его CSS background-image.
- * @param messageRoot Хэндл корневого элемента карточки сообщения
- * @returns Строковый URL картинки или null, если картинка не обнаружена
- */
-export async function extractImageUrl(messageRoot: ElementHandle<Element>) : Promise<string | null> {
-    const imgProbe = await (messageRoot as any).$('.mc-content-media-item_picture');
-    log('Image element found?', !!imgProbe);
-    if (!imgProbe) return null;
-
-    try {
-        const bg = await imgProbe.evaluate((node) => {
-            const el = node as HTMLElement;
-            const inline = el.style?.backgroundImage;
-            const computed = getComputedStyle(el).backgroundImage;
-            return inline && inline !== 'none' ? inline : computed;
-        });
-        return parseBgUrl(bg);
-    } catch (e) {
-        log('Image parse error:', e);
-        return null;
-    }
-}
-
-/** перехват .m3u8/.mp4 после клика */
-// Утилита для фильтрации ответов сети: интересуют .m3u8/.mp4
+/** интересуют .m3u8/.mp4 */
 function isMediaUrl(url: string) { return /\.(m3u8|mp4)(\?|#|$)/i.test(url); }
-/**
- * Подождать появления в сети ответа с URL на медиа (.m3u8/.mp4) после пользовательского действия.
- * Реализовано через подписку на событие 'response' и активное ожидание до timeoutMs.
- * @param page Активная страница Playwright
- * @param timeoutMs Максимальное ожидание в миллисекундах (по умолчанию 12 секунд)
- * @returns Найденный URL или null, если в отведённое время ничего не пришло
- */
+
+/** Перехват .m3u8/.mp4 из сети в течение timeoutMs */
 export async function waitMediaFromNetwork(page: Page, timeoutMs = 12000) {
     const matches: string[] = [];
     const onResponse = (resp: any) => {
@@ -79,19 +33,100 @@ export async function waitMediaFromNetwork(page: Page, timeoutMs = 12000) {
 }
 
 /**
- * Попытаться извлечь URL видео из карточки сообщения.
- * Стратегия:
- * 1) Кликаем по контейнеру медиа и слушаем сеть на предмет .m3u8/.mp4 (реальный поток/файл).
- * 2) Если сеть молчит — пробуем достать <source src> из глобального модального контейнера.
- * 3) Если не вышло — ищем локально внутри карточки и, в крайнем случае, в iframe.
- * Для отладки можно включить визуальные рамки и промежуточные скриншоты.
- * @param page Текущая страница
- * @param messageRoot Корневой элемент карточки сообщения
- * @param opts Опции отладки: visuals (рисовать рамки), screenshots (делать скрины)
- * @returns Строковый URL видео или null, если ничего не найдено
+ * КАРТИНКА:
+ * 1) Находим внутренний узел медиа в карточке (picture/video зона), поднимаемся к .mc-content-media.
+ * 2) Кликаем (нормально или force).
+ * 3) Ждём в DOM элемент .mc-content-media-item со style="background-image: url(...)"
+ *    (сначала глобально в галерее, потом локально в карточке).
+ * 4) Парсим URL из style и (опционально) увеличиваем размер заменой куска строки.
  */
-export async function extractVideoUrl(page: Page, messageRoot: ElementHandle<Element>, opts?: { visuals?: boolean; screenshots?: boolean }) : Promise<string | null> {
-    //TODO: simplify this function
+export async function extractImageUrl(pageOrRoot: Page | ElementHandle<Element>, maybeRoot?: ElementHandle<Element>): Promise<string | null> {
+    const page: Page = (pageOrRoot as any).evaluate ? (pageOrRoot as Page) : (maybeRoot as any)._page;
+    const messageRoot: ElementHandle<Element> = (pageOrRoot as any).evaluate ? (maybeRoot as ElementHandle<Element>) : (pageOrRoot as ElementHandle<Element>);
+
+    // 1) ищем «внутренний» узел картинки внутри карточки
+    const picInner = await (messageRoot as any).$('.mc-content-media-item_picture, .mc-content-media-item_video');
+    log('Image inner node found?', !!picInner);
+    if (!picInner) return null;
+
+    // 2) ближайший контейнер .mc-content-media (кликаем по нему)
+    const mediaContainer = await (picInner as any).evaluateHandle((el: Element) => {
+        const parent = (el as HTMLElement).closest('.mc-content-media');
+        return parent ?? el;
+    });
+
+    try {
+        await (mediaContainer as any).evaluate((el: Element) =>
+            (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center' })
+        );
+        await page.waitForTimeout(60);
+    } catch {}
+
+    try {
+        try {
+            await (mediaContainer as any).click({ timeout: 2500 });
+            log('Clicked media container (normal) for image.');
+        } catch (e1) {
+            log('Normal click failed (image), try force:', e1);
+            await (mediaContainer as any).click({ timeout: 2500, force: true });
+            log('Clicked media container (force) for image.');
+        }
+    } catch (e) {
+        log('Media container click sequence failed (image):', e);
+        return null;
+    }
+
+    // 3) ждём появление элемента с background-image
+    // сперва глобально (галерея), затем локально в карточке
+    const globalSel = '.mc-gallery-container .mc-content-media-item[style*="background-image"]';
+    const localSel  = '.mc-content-media-item[style*="background-image"]';
+
+    // helper: вытащить url(...) из style
+    const pullUrlFromStyle = (style: string | null) => {
+        if (!style) return null;
+        const m = /url\((['"]?)(.*?)\1\)/.exec(style);
+        return m?.[2] ?? null;
+    };
+
+    const extractFromSelector = async (scope: Page | ElementHandle<Element>, sel: string): Promise<string | null> => {
+        try {
+            const handle = await (scope as any).$(sel);
+            if (!handle) return null;
+            const style = await handle.evaluate((n: Element) => (n as HTMLElement).getAttribute('style') || (n as HTMLElement).style?.cssText || '');
+            const url = pullUrlFromStyle(style);
+            return url || null;
+        } catch { return null; }
+    };
+
+    // подождём немного, чтобы стиль успел появиться
+    await page.waitForTimeout(150);
+
+    // Порядок: глобально → локально
+    try {
+        await page.waitForSelector(globalSel, { timeout: 3000 });
+    } catch {}
+    let imgUrl = await extractFromSelector(page, globalSel);
+    if (!imgUrl) {
+        imgUrl = await extractFromSelector(messageRoot, localSel);
+    }
+
+    if (!imgUrl) {
+        log('Image URL not found after click.');
+        return null;
+    }
+
+    // 4) простой апскейл: меняем известные размеры на 676X800 (если встречаются)
+    imgUrl = imgUrl.replace(/270X320|148X320/g, '676X800');
+
+    log('Image URL extracted:', imgUrl);
+    return imgUrl;
+}
+
+/**
+ * 1) кликаем по зоне медиа, слушаем сеть на .m3u8/.mp4
+ * 2) фолбэк: <video><source src> глобально/локально; затем iframe
+ */
+export async function extractVideoUrl(page: Page, messageRoot: ElementHandle<Element>, _opts?: { visuals?: boolean; screenshots?: boolean }): Promise<string | null> {
     const vidInner = await (messageRoot as any).$('.mc-content-media-item_video');
     log('Video inner node found?', !!vidInner);
     if (!vidInner) return null;
@@ -100,14 +135,6 @@ export async function extractVideoUrl(page: Page, messageRoot: ElementHandle<Ele
         const parent = (el as HTMLElement).closest('.mc-content-media');
         return parent ?? el;
     });
-
-    try {
-        const desc = await (mediaContainer as any).evaluate((node: Element) => {
-            const el = node as HTMLElement;
-            return `<${el.tagName.toLowerCase()} class="${el.className}">`;
-        });
-    } catch {}
-
 
     try {
         await (mediaContainer as any).evaluate((el: Element) =>

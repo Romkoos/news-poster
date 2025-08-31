@@ -19,7 +19,7 @@
  */
 
 import {Page, Locator, ElementHandle} from 'playwright';
-import { log } from './logger';
+import {log, logDebug} from './logger';
 
 async function isCenterClickable(page: Page, loc: Locator): Promise<boolean> {
     try {
@@ -96,16 +96,6 @@ export async function clickWithPolling(
 
                 for (let r = 1; r <= innerRetries; r++) {
                     try {
-                        await loc.scrollIntoViewIfNeeded();
-
-                        // проверим, что центр не перекрыт
-                        const centerOk = await isCenterClickable(page, loc);
-                        if (!centerOk) {
-                            // небольшой сдвиг страницы — иногда помогает
-                            await page.mouse.wheel(0, 120);
-                            await page.waitForTimeout(80);
-                        }
-
                         // normal
                         try {
                             await loc.click({ timeout: perClickMs });
@@ -171,7 +161,7 @@ export async function clickWithPolling(
  * @param timeout Таймаут ожидания (мс)
  */
 export async function waitRoot(page: Page, rootSelector: string, timeout: number) {
-    log('Wait root:', rootSelector);
+    logDebug('Wait root:', rootSelector);
     await page.waitForSelector(rootSelector, { timeout });
 }
 

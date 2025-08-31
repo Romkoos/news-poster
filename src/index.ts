@@ -1,5 +1,5 @@
 import './ort-silence';
-import { log } from './lib/logger';
+import {logError, log, logInfo, logWarn} from './lib/logger';
 import { readAppEnv } from './lib/env';
 
 // парсеры
@@ -13,7 +13,7 @@ async function main() {
     if (env.TRY_MOBILE) {
         try {
             await runMobile(env);
-            log('Mobile parser completed successfully.');
+            logInfo('Mobile parser completed successfully.');
             return;
         } catch (e) {
             log('Mobile parser failed, fallback to WEB:', e);
@@ -23,15 +23,15 @@ async function main() {
     // 2) Если мобильный не удался — пробуем WEB
     try {
         await runWeb(env);
-        log('WEB parser completed successfully.');
+        logInfo('WEB parser completed successfully.');
         return;
     } catch (e) {
-        log('WEB parser failed as well:', e.message);
+        logWarn('WEB parser failed as well:', e.message);
         throw e; // пусть pm2 увидит фейл и перезапустит по расписанию
     }
 }
 
 main().catch((err) => {
-    log('FATAL:', err);
+    logError('FATAL:', err);
     process.exit(1);
 });

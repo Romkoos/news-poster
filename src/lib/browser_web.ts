@@ -10,7 +10,7 @@
 import { chromium, Page, Browser, BrowserContext } from 'playwright';
 import * as path from 'path';
 import { ensureDirs } from './fsutil';
-import { log } from './logger';
+import {log, logInfo} from './logger';
 
 /**
  * Опции запуска браузера/контекста.
@@ -74,7 +74,7 @@ export async function bootAndOpenWeb(url: string, opts: BootOpts = {}): Promise<
 
     log('Goto:', url);
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    log('Loaded:', page.url());
+    logInfo('Loaded:', page.url());
     return { browser, ctx, page };
 }
 
