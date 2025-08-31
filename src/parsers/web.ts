@@ -76,11 +76,11 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
             const q = toProcess[qi];
             log(`(WEB) [${toProcess.length - qi}/${toProcess.length}] index=${q.index}`);
 
-            // 🔍 ДО перевода проверяем, нет ли уже такого хеша в БД (на всякий случай)
+            //  ДО перевода проверяем, нет ли уже такого хеша в БД (на всякий случай)
             try {
                 if (db.hasNewsHash(q.hash)) {
-                    log(`(WEB) Skip by DB duplicate hash: ${q.hash} (index=${q.index})`);
-                    continue;
+                    log(`(WEB) Stop publishing by DB duplicate hash: ${q.hash} (index=${q.index})`);
+                    break; // <-- РАНЬШЕ: continue. Теперь — немедленно завершаем цикл публикации.
                 }
             } catch (e) {
                 log('(WEB) DB hasNewsHash failed (continue anyway):', e);
@@ -120,6 +120,19 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
             } catch (e) {
                 log(`(WEB) Item failed, continue:`, e);
             }
+        }
+
+        if (lastPostedHash) {
+            try {
+                db.setLastHash(lastPostedHash);
+                log('(WEB) DB lastHash updated:', lastPostedHash);
+            } catch (e) {
+                log('(WEB) DB setLastHash failed, fallback to file cache:', e);
+                await writeCache({ lastHash: lastPostedHash });
+                log('(WEB) Cache updated (file):', lastPostedHash);
+            }
+        } else {
+            log('(WEB) Nothing posted — cache not updated.');
         }
 
         if (lastPostedHash) {

@@ -93,6 +93,7 @@ export async function clickWithPolling(
             for (const idx of tryIndexes) {
                 const loc = page.locator(selector).nth(idx);
                 // внутри одного тика несколько быстрых попыток
+
                 for (let r = 1; r <= innerRetries; r++) {
                     try {
                         await loc.scrollIntoViewIfNeeded();

@@ -15,7 +15,7 @@ import { ReadableStream as WebReadableStream } from 'node:stream/web';
 const CAPTION_MAX = 900;    // запас от лимита 1024
 const TEXT_CHUNK = 3900;    // запас от лимита 4096
 const CHANNEL_URL = 'https://t.me/yalla_balagan_news';
-const FOOTER_TITLE = 'Ялла балаган | Новости';
+const FOOTER_TITLE = 'Йалла балаган | Новости';
 
 const DEFAULT_UA =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36';
@@ -115,19 +115,34 @@ async function uploadVideoMultipart(
     filePath: string,
     caption?: string
 ) {
+    // 1) читаем файл в Buffer
+    const buf = await fs.promises.readFile(filePath);
+
+    // 2) создаём КОПИЮ в обычном ArrayBuffer через новый Uint8Array
+    //    (такая Uint8Array имеет buffer строго типа ArrayBuffer, не SharedArrayBuffer)
+    const bytes = new Uint8Array(buf);
+
+    // 3) собираем Blob из Uint8Array (BlobPart OK)
+    const blob = new Blob([bytes], { type: 'video/mp4' });
+
+    // 4) формируем multipart
     const form = new FormData();
     form.append('chat_id', chatId);
     if (caption) form.append('caption', clipCaption(caption));
     form.append('supports_streaming', 'true');
     form.append('parse_mode', 'MarkdownV2');
-    form.append('video', fs.createReadStream(filePath) as any, path.basename(filePath));
+    form.append('video', blob, path.basename(filePath));
 
     const res = await fetch(`https://api.telegram.org/bot${token}/sendVideo`, {
         method: 'POST',
         body: form as any,
     });
-    if (!res.ok) throw new Error(`sendVideo multipart failed: ${res.status} ${await res.text()}`);
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`sendVideo multipart failed: ${res.status} ${text || res.statusText}`);
+    }
 }
+
 
 // -------- public API --------
 

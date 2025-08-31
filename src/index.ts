@@ -26,7 +26,7 @@ async function main() {
         log('WEB parser completed successfully.');
         return;
     } catch (e) {
-        log('WEB parser failed as well:', e);
+        log('WEB parser failed as well:', e.message);
         throw e; // пусть pm2 увидит фейл и перезапустит по расписанию
     }
 }
