@@ -11,6 +11,7 @@ import { bootAndOpenWeb } from '../lib/browser_web';
 
 // DB
 import { initDb } from '../lib/db';
+import {ElementHandle} from "playwright";
 
 export async function runWeb(env: ReturnType<typeof import('../lib/env').readAppEnv>) {
     const db = initDb();
@@ -34,12 +35,13 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
 
         await waitRoot(page, env.ROOT_SELECTOR, env.WAIT_FOR);
 
+        // Берём текстовые ноды внутри ленты (items[0] — самый свежий)
         const { items } = await pickTextNode(page, env.ROOT_SELECTOR, 'first', 0);
         const scanCount = Math.min(env.CHECK_LAST_N, items.length);
         log(`(WEB) Scan last N: ${scanCount} (from total ${items.length})`);
 
         // lastHash через БД (fallback — файл)
-        let lastHash: string | null = null;
+        let lastHash: string | null;
         try {
             lastHash = db.getLastHash();
         } catch (e) {
@@ -69,23 +71,78 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
             return;
         }
 
+        // --- НОВОЕ: готовим данные для скролла по высотам карточек .mc-reporter ---
+        type EnrichedItem = QueueItem & { reporter: ElementHandle<Element> | null; height: number };
+        const enriched: EnrichedItem[] = [];
+        for (const q of toProcess) {
+            // ближайшая карточка
+            const reporter = await q.handle.evaluateHandle((node) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                return (node as any).closest?.('.mc-reporter') || null;
+            }) as ElementHandle<Element> | null;
+
+            // высота карточки (с запасом по умолчанию)
+            let height = 0;
+            try {
+                height = reporter
+                    ? await reporter.evaluate((n) => Math.ceil((n as HTMLElement).getBoundingClientRect().height || 0))
+                    : 0;
+            } catch { /* ignore */ }
+            if (!height || height < 40) height = 400; // дефолтная «разумная» высота
+
+            enriched.push({ ...q, reporter, height });
+        }
+
+        // Обрабатывать будем от «самой старой» к «самой новой»
+        const oldestFirst = enriched.slice().reverse(); // теперь [0] — «самая старая»
+
+        // --- УМНЫЙ АПСКРОЛЛ ---
+        // считаем суммарную высоту CHECK_LAST_N карточек и сравниваем с высотой вьюпорта
+        const poolHeight = oldestFirst.reduce((acc, it) => acc + it.height, 0);
+        const viewportH = await page.evaluate(() => window.innerHeight || 0);
+        // на всякий случай небольшой запас, чтобы верхняя карточка точно оказалась полностью в зоне клика
+        const SAFETY = 80;
+
+        // крутить вверх нужно только если пул не помещается целиком
+        const scrollUp = Math.max(0, Math.ceil(poolHeight - viewportH + SAFETY));
+
+        log(
+            '(WEB) ViewportH=%d, poolHeight=%d, scrollUp=%d (only if > 0)',
+            viewportH,
+            poolHeight,
+            scrollUp
+        );
+
+        if (scrollUp > 0) {
+            await page.mouse.wheel(0, -scrollUp);
+            await page.waitForTimeout(150);
+        }
+
+
         let lastPostedHash: string | null = null;
 
-        for (let qi = toProcess.length - 1; qi >= 0; qi--) {
-            const q = toProcess[qi];
-            log(`(WEB) [${toProcess.length - qi}/${toProcess.length}] index=${q.index}`);
+        for (let i = 0; i < oldestFirst.length; i++) {
+            const q = oldestFirst[i];
+            log(`(WEB) [${i + 1}/${oldestFirst.length}] index=${q.index}`);
 
-            //  ДО перевода проверяем, нет ли уже такого хеша в БД (на всякий случай)
+            // Дубликаты до перевода (по исходному he-тексту)
             try {
                 if (db.hasNewsHash(q.hash)) {
-                    log(`(WEB) Stop publishing by DB duplicate hash: ${q.hash} (index=${q.index}), text=${q.textHe}`);
-                    continue
+                    log(`(WEB) Stop publishing by DB duplicate hash: ${q.hash} (index=${q.index})`);
+                    // даже если дубликат — всё равно прокручиваем вниз на его высоту,
+                    // чтобы не сбить дальнейшую геометрию
+                    if (q.height > 0) {
+                        await page.mouse.wheel(0, q.height);
+                        await page.waitForTimeout(100);
+                    }
+                    continue;
                 }
             } catch (e) {
                 log('(WEB) DB hasNewsHash failed (continue anyway):', e);
             }
 
             try {
+                // Достаём медиа (клик по карточке уже не нужен — мы на ней «стоим» по высоте)
                 const messageRoot = await findMessageRoot(q.handle);
                 const [imgUrl, videoUrlCandidate] = await Promise.all([
                     extractImageUrl(page, messageRoot),
@@ -118,6 +175,12 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
                 lastPostedHash = q.hash;
             } catch (e) {
                 log(`(WEB) Item failed, continue:`, e);
+            } finally {
+                // Прокрутка ВНИЗ на высоту только что обработанной карточки
+                if (q.height > 0) {
+                    await page.mouse.wheel(0, q.height);
+                    await page.waitForTimeout(100);
+                }
             }
         }
 
@@ -138,3 +201,4 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
         log('(WEB) Browser closed.');
     }
 }
+

@@ -5,10 +5,7 @@
 // Видео: как было — слушаем сеть + фолбэки по DOM.
 
 import { Page, ElementHandle } from 'playwright';
-import {log, logInfo} from './logger';
-
-/** интересуют .m3u8/.mp4 */
-function isMediaUrl(url: string) { return /\.(m3u8|mp4)(\?|#|$)/i.test(url); }
+import {log} from './logger';
 
 /**
  * КАРТИНКА:
@@ -119,7 +116,37 @@ export async function extractImageUrl(
  * 1) кликаем по зоне медиа, слушаем сеть на .m3u8/.mp4
  * 2) фолбэк: <video><source src> глобально/локально; затем iframe
  */
-export async function extractVideoUrl(page: Page, messageRoot: ElementHandle<Element>, _opts?: { visuals?: boolean; screenshots?: boolean }): Promise<string | null> {
+// helpers
+function isMp4(u: string) { return /\.mp4(\?|#|$)/i.test(u); }
+function preferAkamai(u: string) { return /makostorepdl-a\.akamaihd\.net/i.test(u); }
+
+async function waitMp4FromNetwork(page: Page, timeoutMs = 8000): Promise<string | null> {
+    const hits: string[] = [];
+    const onResp = (resp: any) => {
+        try {
+            const u = resp.url();
+            if (isMp4(u)) hits.push(u);
+        } catch {}
+    };
+    page.on('response', onResp);
+    try {
+        const t0 = Date.now();
+        while (Date.now() - t0 < timeoutMs) {
+            if (hits.length) {
+                // если есть несколько — отдаём akamai в приоритет
+                const akamai = hits.find(preferAkamai);
+                return akamai ?? hits[0];
+            }
+            await page.waitForTimeout(100);
+        }
+        return null;
+    } finally {
+        page.off('response', onResp);
+    }
+}
+
+// основная функция
+export async function extractVideoUrl(page: Page, messageRoot: ElementHandle<Element>): Promise<string | null> {
     const vidInner = await (messageRoot as any).$('.mc-content-media-item_video');
     log('Video inner node found?', !!vidInner);
     if (!vidInner) return null;
@@ -129,14 +156,12 @@ export async function extractVideoUrl(page: Page, messageRoot: ElementHandle<Ele
         return parent ?? el;
     });
 
+    // прокрутка + клик по тизеру
     try {
         await (mediaContainer as any).evaluate((el: Element) =>
             (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center' })
         );
-        await page.waitForTimeout(60);
-    } catch {}
-
-    try {
+        await page.waitForTimeout(80);
         try {
             await (mediaContainer as any).click({ timeout: 2500 });
             log('Clicked media container (normal).');
@@ -150,52 +175,34 @@ export async function extractVideoUrl(page: Page, messageRoot: ElementHandle<Ele
         return null;
     }
 
-    // Fallback 1: глобальный контейнер
-    try {
-        const waitSelector = '.mc-gallery-container .mc-glr-video-wrap video source[src]';
-        log('Wait for video source:', waitSelector);
-        await page.waitForSelector(waitSelector, { timeout: 6000 });
-        const src = await page.$eval(waitSelector, (n) =>
-            (n as HTMLSourceElement).src || (n as HTMLSourceElement).getAttribute('src') || ''
-        );
-        if (src) {
-            log('Video src extracted (global):', src);
-            return src;
-        }
-    } catch (e) {
-        log('Global video src wait/extract failed:', e);
+    // короткая пауза на анимацию оверлея
+    await page.waitForTimeout(150);
+
+    // 1) основной путь — сеть
+    let src = await waitMp4FromNetwork(page, 8000);
+    if (!src) {
+        // 2) краткий фолбэк по DOM: НЕ требуем видимости
+        const sel = '.mc-glr-video-wrap > video > source[src]';
+        try {
+            // ждём прикрепления контейнера, не "visible"
+            await page.waitForSelector('.mc-glr-video-wrap', { state: 'attached', timeout: 1500 }).catch(() => {});
+            src = await page.locator(sel).first().getAttribute('src').catch(() => null) ?? null;
+        } catch {}
     }
 
-    // Fallback 2: локально в карточке
+    // по возможности закрываем оверлей, чтобы не мешал следующим постам
     try {
-        const localSel = '.mc-glr-video-wrap video source[src]';
-        log('Try local video selector inside message root:', localSel);
-        const local = await (messageRoot as any).$(localSel);
-        if (local) {
-            const src = await local.evaluate((n: Element) =>
-                (n as HTMLSourceElement).getAttribute('src') || (n as HTMLSourceElement).src || ''
-            );
-            if (src) {
-                log('Local video src extracted:', src);
-                return src;
-            }
-        }
-    } catch (e2) {
-        log('Local video extract failed:', e2);
-    }
-
-    // Fallback 3: iframe
-    try {
-        const iframe = await page.$('.mc-gallery-container iframe[src], .mc-glr-video-wrap iframe[src]');
-        if (iframe) {
-            const ifSrc = await iframe.getAttribute('src');
-            if (ifSrc && isMediaUrl(ifSrc)) {
-                log('Iframe src is media:', ifSrc);
-                return ifSrc;
-            }
-            log('Iframe found (non-media src):', ifSrc);
+        const closeBtn = page.locator('.mc-glr-btn-close').first();
+        if (await closeBtn.count().catch(() => 0)) {
+            await closeBtn.click({ timeout: 1000 }).catch(() => {});
         }
     } catch {}
 
+    if (src) {
+        log('Video URL (network/DOM):', src);
+        return src;
+    }
+
+    log('Video URL not found.');
     return null;
 }

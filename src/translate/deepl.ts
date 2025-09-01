@@ -16,6 +16,8 @@ function getTranslator(): deepl.Translator {
 
 export async function heToRuDeepl(text: string): Promise<string> {
     const tr = getTranslator();
-    const result = await tr.translateText(text, 'he', 'ru');
+    const result = await tr.translateText(text, 'he', 'ru', {
+        glossary: '2738e371-c08c-4ae3-a917-13e0cb9b85a1'
+    });
     return result.text.trim();
 }
