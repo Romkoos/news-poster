@@ -34,8 +34,9 @@ Thumbs.db
 *.zip
 *.tar
 *.tar.gz
+*.bd
 
-/data/
-*.db
-*.db-shm
-*.db-wal
+# ignore local sqlite db
+data/*.db
+data/*.db-*
+EOF
