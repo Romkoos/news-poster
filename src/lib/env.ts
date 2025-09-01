@@ -37,6 +37,8 @@ export type AppEnv = {
     TELEGRAM_CHAT_ID: string;
 
     DEEPL_API_KEY: string;
+    USE_LOCAL_TRANSLATION: boolean;
+    USE_DEEPL: boolean;
 
     LATEST_PICK: 'first' | 'last';
     OFFSET_FROM_END: number;
@@ -78,6 +80,8 @@ export function readAppEnv(): AppEnv {
         TELEGRAM_CHAT_ID: env('TELEGRAM_CHAT_ID'),
 
         DEEPL_API_KEY: env('DEEPL_API_KEY'),
+        USE_LOCAL_TRANSLATION: (env('USE_LOCAL_TRANSLATION', false) === '1'),
+        USE_DEEPL: (env('USE_DEEPL', false) === '1'),
 
         LATEST_PICK: ((env('LATEST_PICK', false) || 'first').toLowerCase() as 'first' | 'last'),
         OFFSET_FROM_END: Number(env('OFFSET_FROM_END', false) || '1'),

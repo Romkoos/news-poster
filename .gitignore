@@ -35,4 +35,7 @@ Thumbs.db
 *.tar
 *.tar.gz
 
+/data/
 *.db
+*.db-shm
+*.db-wal

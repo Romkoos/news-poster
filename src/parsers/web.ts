@@ -54,7 +54,7 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
 
         for (let i = 0; i < scanCount; i++) {
             const handle = items[i];
-            const textHe = await extractTextFrom(handle);
+            const textHe = await extractTextFrom(handle, page);
             const hash = sha1(textHe);
 
             if (lastHash && hash === lastHash) {
@@ -94,7 +94,7 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
 
                 // Перевод → публикация
                 const t0 = Date.now();
-                const textRu = await heToRu(q.textHe);
+                const textRu = await heToRu(q.textHe, env);
                 log(`(WEB) Translation ms:`, Date.now() - t0);
 
                 const videoUrl =

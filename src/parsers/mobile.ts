@@ -31,7 +31,7 @@ export async function runMobile(env: ReturnType<typeof import('../lib/env').read
 
         for (let i = 0; i < scanCount; i++) {
             const handle = items[i];
-            const textHe = await extractTextFrom(handle);
+            const textHe = await extractTextFrom(handle, page);
             const hash = sha1(textHe);
 
             if (lastHash && hash === lastHash) {
@@ -61,7 +61,7 @@ export async function runMobile(env: ReturnType<typeof import('../lib/env').read
 
                 // Перевод
                 const t0 = Date.now();
-                const textRu = await heToRu(q.textHe);
+                const textRu = await heToRu(q.textHe, env);
                 log(`(MOBILE) Translation ms:`, Date.now() - t0);
 
                 // Отправка: видео > фото > текст

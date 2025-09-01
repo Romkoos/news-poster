@@ -203,13 +203,25 @@ export async function pickTextNode(page: Page, rootSelector: string, latestPick:
  * Извлечь человекочитаемый текст из элемента.
  * Пытаемся взять innerText (если доступен и непустой), иначе fallback на textContent.
  */
-export async function extractTextFrom(el: ElementHandle<Element>) {
+export async function extractTextFrom(el: ElementHandle<Element>, page: Page): Promise<string> {
+    try {
+        // если внутри есть кнопка "читать дальше" — жмём и ждём чуть-чуть
+        const btn = await el.$('.mc-read-more-btn');
+        if (btn) {
+            await btn.click().catch(() => {});
+            await page.waitForTimeout(50);
+        }
+    } catch {
+        // игнорируем, если кнопки нет или клик не удался
+    }
+
     const text = await el.evaluate((node) => {
         // @ts-ignore
         const it = (node as any).innerText;
         if (typeof it === 'string' && it.length) return it;
         return node.textContent || '';
     });
+
     return String(text || '');
 }
 
