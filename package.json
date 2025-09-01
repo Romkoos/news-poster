@@ -1,10 +1,13 @@
 {
   "name": "news-poster",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "main": "index.js",
   "scripts": {
     "start": "ts-node src/index.ts",
     "cron:restart": "pm2 restart news-poster",
+    "clear:start": "pm2 start news-poster-purge",
+    "clear:restart": "pm2 restart news-poster-purge",
+    "clear:stop": "pm2 stop news-poster-purge",
     "log": "pm2 logs news-poster --lines 200",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

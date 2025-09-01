@@ -24,6 +24,9 @@ async function main() {
     try {
         await runWeb(env);
         logInfo('WEB parser completed successfully.');
+        log(' ');
+        log('----------------------------------------------');
+        log(' ');
         return;
     } catch (e) {
         logWarn('WEB parser failed as well:', e.message);
