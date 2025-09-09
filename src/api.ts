@@ -27,12 +27,46 @@ app.get('/api/health', (_req, res) => {
     res.json({ ok: true });
 });
 
-// /api/news/today?limit=500
+// /api/news/today?limit=500&extended=1&all=1&onlyNew=1
 app.get('/api/news/today', (req, res) => {
     const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 500));
-    const rows = db.getNewsFor(todayIL()).slice(-limit);         // уже по возрастанию ts → берём последние
+    const rows = db.getNewsFor(todayIL()).slice(-limit); // уже по возрастанию ts → берём последние
+
     // отдаём по убыванию времени (свежее первым)
-    res.json(rows.sort((a,b) => b.ts - a.ts));
+    const all = rows.sort((a,b) => b.ts - a.ts);
+
+    const lastUsedPostIdBefore = db.getLastUsedPostId();
+    const newSince = all.filter(r => r.id > lastUsedPostIdBefore);
+
+    // флаги управления выводом
+    const q = (name: string) => String((req.query as any)[name] || '').toLowerCase();
+    const isTrue = (v: string) => v === '1' || v === 'true' || v === 'yes' || v === 'y';
+
+    const extended = isTrue(q('extended'));
+    const forceAll = isTrue(q('all'));
+    const forceOnlyNew = isTrue(q('onlyNew')) || isTrue(q('new')) || isTrue(q('since'));
+
+    // по умолчанию: если маркер задан, возвращаем только новые; иначе — все
+    let list = all;
+    if (forceAll) {
+        list = all;
+    } else if (forceOnlyNew) {
+        list = newSince;
+    } else if (lastUsedPostIdBefore > 0) {
+        list = newSince;
+    }
+
+    if (extended) {
+        res.json({
+            all,
+            newSince,
+            lastUsedPostIdBefore,
+            totalAll: all.length,
+            totalNew: newSince.length,
+        });
+    } else {
+        res.json(list);
+    }
 });
 
 // /api/news?date=YYYY-MM-DD&limit=500
