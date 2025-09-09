@@ -21,6 +21,7 @@
     "better-sqlite3": "^12.2.0",
     "cors": "^2.8.5",
     "deepl-node": "^1.19.0",
+    "dotenv": "^17.2.2",
     "dotenv-flow": "^4.1.0",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
