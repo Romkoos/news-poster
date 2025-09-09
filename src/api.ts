@@ -5,7 +5,9 @@ import { initDb } from './lib/db';
 
 const app = express();
 const db = initDb();
+import usersRoutes from './api/users/routes';
 
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
 // CORS: по умолчанию открыт. Можно ограничить через CORS_ORIGIN="https://my.site, http://localhost:5173"
@@ -40,6 +42,8 @@ app.get('/api/news', (req, res) => {
     const rows = db.getNewsFor(date).slice(-limit);
     res.json(rows.sort((a,b) => b.ts - a.ts));
 });
+
+app.use('/api/users', usersRoutes);
 
 const PORT = Number(process.env.API_PORT || 8080);
 app.listen(PORT, () => {
