@@ -66,6 +66,7 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
 
     // NEW: быстрый проверочный запрос по хешу
     const newsHasHashStmt = db.prepare(`SELECT 1 FROM news WHERE hash = ? LIMIT 1`);
+    const latestNewsIdStmt = db.prepare(`SELECT id FROM news ORDER BY id DESC LIMIT 1`);
 
     return {
         raw: db,
@@ -77,6 +78,24 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
 
         setLastHash(h: string): void {
             metaSet.run('last_hash', h);
+        },
+
+        // --- meta: lastUsedPostId ---
+        getLastUsedPostId(): number {
+            const row = metaGet.get('lastUsedPostId') as { value?: string } | undefined;
+            const n = row?.value != null ? Number(row.value) : 0;
+            return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+        },
+        setLastUsedPostId(id: number): void {
+            const v = Math.max(0, Math.floor(Number(id)));
+            metaSet.run('lastUsedPostId', String(v));
+        },
+
+        // --- news helpers ---
+        getLatestNewsId(): number {
+            const row = latestNewsIdStmt.get() as { id?: number } | undefined;
+            const id = row?.id ?? 0;
+            return Number.isFinite(id) && id > 0 ? id : 0;
         },
 
         // сохраняем уже ПЕРЕВЕДЁННЫЙ текст (ru)

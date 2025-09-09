@@ -45,6 +45,19 @@ app.get('/api/news', (req, res) => {
 
 app.use('/api/users', usersRoutes);
 
+// POST /api/news/last-used — запись маркера по нажатию кнопки на фронте
+app.post('/api/news/last-used', (req, res) => {
+    const before = db.getLastUsedPostId();
+    const body: any = req.body || {};
+    const fromBody = typeof body.id !== 'undefined' ? Number(body.id) : NaN;
+    const candidate = Number.isFinite(fromBody) && fromBody > 0 ? Math.floor(fromBody) : db.getLatestNewsId();
+    const after = candidate || before; // не понижать на 0 в ответе
+
+    // если candidate == 0 — запишем 0 (как и ранее), иначе — candidate
+    db.setLastUsedPostId(candidate || 0);
+    res.json({ ok: true, lastUsedPostIdBefore: before, lastUsedPostIdAfter: after });
+});
+
 const PORT = Number(process.env.API_PORT || 8080);
 app.listen(PORT, () => {
     // eslint-disable-next-line no-console
