@@ -13,6 +13,10 @@ import { bootAndOpenWeb } from '../lib/browser_web';
 import { initDb } from '../lib/db';
 import {ElementHandle} from "playwright";
 
+// Authors/sources to exclude by header name inside .mc-message-header__name
+// Extend this list as needed.
+const EXCLUDED_AUTHORS = ["מבזקן 12", "דסק החוץ"];
+
 export async function runWeb(env: ReturnType<typeof import('../lib/env').readAppEnv>) {
     const db = initDb();
 
@@ -124,6 +128,26 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
         for (let i = 0; i < oldestFirst.length; i++) {
             const q = oldestFirst[i];
             log(`(WEB) [${i + 1}/${oldestFirst.length}] index=${q.index}`);
+
+            // Первичная фильтрация по источнику/имени автора в .mc-message-header__name
+            try {
+                const headerName = await q.handle.evaluate((node) => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const msg = (node as any).closest?.('.mc-message');
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const nameEl = msg ? (msg.querySelector('.mc-message-header__name') as any) : null;
+                    const raw = nameEl ? (nameEl.innerText || nameEl.textContent || '') : '';
+                    return String(raw || '').trim();
+                });
+                if (EXCLUDED_AUTHORS.includes(headerName)) {
+                    log(`(WEB) Skipping by excluded author: "${headerName}" (index=${q.index})`);
+                    if (q.height > 0) {
+                        await page.mouse.wheel(0, q.height);
+                        await page.waitForTimeout(100);
+                    }
+                    continue;
+                }
+            } catch {}
 
             // Дубликаты до перевода (по исходному he-тексту)
             try {
