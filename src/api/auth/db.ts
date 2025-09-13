@@ -15,6 +15,7 @@ db.exec(`
     );
 `);
 
+
 export type DbUser = { id:number; email:string; name?:string; password_hash:string; created_at:number };
 
 export function findUserByEmail(email: string): DbUser | undefined {

@@ -3,8 +3,6 @@ import Database from 'better-sqlite3';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 
-export type DB = ReturnType<typeof initDb>;
-
 function ensureDir(dir: string) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }

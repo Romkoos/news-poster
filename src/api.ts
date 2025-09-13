@@ -1,7 +1,7 @@
 // src/api.ts
 import express from 'express';
 import cors from 'cors';
-import { initDb } from './lib/db';
+import { initDb } from './api/news/db';
 
 const app = express();
 const db = initDb();

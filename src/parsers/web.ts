@@ -10,7 +10,7 @@ import { sendPlain, sendPhoto, sendVideo } from '../telegram';
 import { bootAndOpenWeb } from '../lib/browser_web';
 
 // DB
-import { initDb } from '../lib/db';
+import { initDb } from '../api/news/db';
 import {ElementHandle} from "playwright";
 
 // Authors/sources to exclude by header name inside .mc-message-header__name
