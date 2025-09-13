@@ -5,7 +5,7 @@
 // Видео: как было — слушаем сеть + фолбэки по DOM.
 
 import { Page, ElementHandle } from 'playwright';
-import {log} from './logger';
+import {log} from '../shared/logger';
 
 /**
  * КАРТИНКА:

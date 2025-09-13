@@ -1,5 +1,5 @@
 import { initDb } from './lib/db';
-import { log } from './lib/logger';
+import { log } from './shared/logger';
 
 async function main() {
     const db = initDb();

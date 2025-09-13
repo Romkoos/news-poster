@@ -1,6 +1,6 @@
 // src/lib/scrape.ts
 // Назначение: чистые функции для работы со страницей — ожидания, клики, выбор нод и извлечение текста.
-// Важный принцип: функции не знают о .env и не управляют браузером, только манипулируют переданным Page/Handle.
+// Важный принцип: функции не знают о .config и не управляют браузером, только манипулируют переданным Page/Handle.
 // Это делает логику тестируемой и переиспользуемой.
 
 
@@ -19,7 +19,7 @@
  */
 
 import {Page, Locator, ElementHandle} from 'playwright';
-import {log, logDebug} from './logger';
+import {log, logDebug} from '../shared/logger';
 
 
 export async function clickWithPolling(
@@ -42,8 +42,6 @@ export async function clickWithPolling(
     const nth = opts.nth ?? 0;
 
     const deadline = Date.now() + totalMs;
-    log(`Click polling: ${selector} attemptsMax=${attemptsMax}, intervalMs=${intervalMs}`);
-
     const waitSuccess = async (): Promise<boolean> => {
         try {
             if (waitAfterClickSelector) {
@@ -132,7 +130,6 @@ export async function clickWithPolling(
  * @param timeout Таймаут ожидания (мс)
  */
 export async function waitRoot(page: Page, rootSelector: string, timeout: number) {
-    logDebug('Wait root:', rootSelector);
     await page.waitForSelector(rootSelector, { timeout });
 }
 

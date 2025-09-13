@@ -13,8 +13,9 @@
  * Вернуть текущую метку времени в формате ISO без букв T/Z (удобнее читать в логах).
  */
 export function ts() {
-    const d = new Date();
-    return d.toISOString().replace('T', ' ').replace('Z', '');
+    return '';
+    // const d = new Date();
+    // return d.toISOString().replace('T', ' ').replace('Z', '');
 }
 
 

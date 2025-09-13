@@ -1,7 +1,7 @@
-// src/lib/env.ts
-// Назначение: чтение и валидация переменных окружения (.env) с формированием удобной структуры AppEnv.
+// src/lib/config.ts
+// Назначение: чтение и валидация переменных окружения (.config) с формированием удобной структуры AppEnv.
 // Этот модуль централизует все настройки приложения: целевой сайт, селекторы, тайминги, 
-// а также флаги отладки браузера. Значения читаются из process.env и приводятся к нужным типам.
+// а также флаги отладки браузера. Значения читаются из process.config и приводятся к нужным типам.
 // Если обязательная переменная отсутствует — бросаем понятную ошибку с подсказками.
 
 /**
@@ -14,9 +14,9 @@
 
 import dotenvFlow from 'dotenv-flow';
 
-dotenvFlow.config(); // сам выберет .env, .env.local и т.д.
+dotenvFlow.config(); // сам выберет .config, .config.local и т.д.
 
-export function env(name: string, required = true): string {
+export function config(name: string, required = true): string {
     const v = process.env[name];
     if (required && !v) throw new Error(`Missing env: ${name}`);
     return v || '';
@@ -24,12 +24,11 @@ export function env(name: string, required = true): string {
 
 
 /**
- * Схема конфигурации приложения, собранная из .env.
+ * Схема конфигурации приложения, собранная из .config.
  * Все строковые значения приводятся к нужным типам, где это уместно.
  * Флаги DEBUG_* позволяют тонко управлять поведением браузера и артефактами.
  */
 export type AppEnv = {
-    TRY_MOBILE: boolean;
     MOBILE_TARGET_URL: string;
     WEB_TARGET_URL: string;
     LIST_ITEM_SELECTOR: string;
@@ -37,7 +36,6 @@ export type AppEnv = {
     TELEGRAM_CHAT_ID: string;
 
     DEEPL_API_KEY: string;
-    USE_LOCAL_TRANSLATION: boolean;
     USE_DEEPL: boolean;
 
     LATEST_PICK: 'first' | 'last';
@@ -67,43 +65,41 @@ export type AppEnv = {
 };
 
 /**
- * Собрать конфигурацию приложения из переменных окружения .env.
+ * Собрать конфигурацию приложения из переменных окружения .config.
  * Необязательные значения имеют дефолты, булевы флаги читаются как '1' → true.
  */
 export function readAppEnv(): AppEnv {
     return {
-        TRY_MOBILE: (env('TRY_MOBILE', false) === '1'),
-        MOBILE_TARGET_URL: env('MOBILE_TARGET_URL'),
-        WEB_TARGET_URL: env('WEB_TARGET_URL'),
-        LIST_ITEM_SELECTOR: env('LIST_ITEM_SELECTOR'),
-        TELEGRAM_BOT_TOKEN: env('TELEGRAM_BOT_TOKEN'),
-        TELEGRAM_CHAT_ID: env('TELEGRAM_CHAT_ID'),
+        MOBILE_TARGET_URL: config('MOBILE_TARGET_URL'),
+        WEB_TARGET_URL: config('WEB_TARGET_URL'),
+        LIST_ITEM_SELECTOR: config('LIST_ITEM_SELECTOR'),
+        TELEGRAM_BOT_TOKEN: config('TELEGRAM_BOT_TOKEN'),
+        TELEGRAM_CHAT_ID: config('TELEGRAM_CHAT_ID'),
 
-        DEEPL_API_KEY: env('DEEPL_API_KEY'),
-        USE_LOCAL_TRANSLATION: (env('USE_LOCAL_TRANSLATION', false) === '1'),
-        USE_DEEPL: (env('USE_DEEPL', false) === '1'),
+        DEEPL_API_KEY: config('DEEPL_API_KEY'),
+        USE_DEEPL: (config('USE_DEEPL', false) === '1'),
 
-        LATEST_PICK: ((env('LATEST_PICK', false) || 'first').toLowerCase() as 'first' | 'last'),
-        OFFSET_FROM_END: Number(env('OFFSET_FROM_END', false) || '1'),
-        ROOT_SELECTOR: (env('ROOT_SELECTOR', false) || '.mc-feed_open').trim(),
-        WAIT_FOR: Number(env('WAIT_FOR_LIST_TIMEOUT_MS', false) || '15000'),
+        LATEST_PICK: ((config('LATEST_PICK', false) || 'first').toLowerCase() as 'first' | 'last'),
+        OFFSET_FROM_END: Number(config('OFFSET_FROM_END', false) || '1'),
+        ROOT_SELECTOR: (config('ROOT_SELECTOR', false) || '.mc-feed_open').trim(),
+        WAIT_FOR: Number(config('WAIT_FOR_LIST_TIMEOUT_MS', false) || '15000'),
 
-        CLICK_SELECTOR: env('CLICK_SELECTOR', false) || undefined,
-        CLICK_INDEX: Number(env('CLICK_INDEX', false) || '0'),
-        CLICK_POLL_SECONDS: Number(env('CLICK_POLL_SECONDS', false) || '10'),
-        CLICK_POLL_INTERVAL_MS: Number(env('CLICK_POLL_INTERVAL_MS', false) || '1000'),
-        WAIT_AFTER_CLICK_MS: Number(env('WAIT_AFTER_CLICK_MS', false) || '0'),
+        CLICK_SELECTOR: config('CLICK_SELECTOR', false) || undefined,
+        CLICK_INDEX: Number(config('CLICK_INDEX', false) || '0'),
+        CLICK_POLL_SECONDS: Number(config('CLICK_POLL_SECONDS', false) || '10'),
+        CLICK_POLL_INTERVAL_MS: Number(config('CLICK_POLL_INTERVAL_MS', false) || '1000'),
+        WAIT_AFTER_CLICK_MS: Number(config('WAIT_AFTER_CLICK_MS', false) || '0'),
 
 
 
-        CHECK_LAST_N: Math.max(1, Number(env('CHECK_LAST_N', false) || '5')),
+        CHECK_LAST_N: Math.max(1, Number(config('CHECK_LAST_N', false) || '5')),
 
-        DEBUG_BROWSER: (env('DEBUG_BROWSER', false) === '1'),
-        DEBUG_HEADFUL: (env('DEBUG_HEADFUL', false) === '1'),
-        DEBUG_DEVTOOLS: (env('DEBUG_DEVTOOLS', false) === '1'),
-        DEBUG_RECORD_VIDEO: (env('DEBUG_RECORD_VIDEO', false) === '1'),
-        DEBUG_TRACE: (env('DEBUG_TRACE', false) === '1'),
-        DEBUG_SCREENSHOTS: (env('DEBUG_SCREENSHOTS', false) === '1'),
-        DEBUG_VISUALS: (env('DEBUG_VISUALS', false) === '1'),
+        DEBUG_BROWSER: (config('DEBUG_BROWSER', false) === '1'),
+        DEBUG_HEADFUL: (config('DEBUG_HEADFUL', false) === '1'),
+        DEBUG_DEVTOOLS: (config('DEBUG_DEVTOOLS', false) === '1'),
+        DEBUG_RECORD_VIDEO: (config('DEBUG_RECORD_VIDEO', false) === '1'),
+        DEBUG_TRACE: (config('DEBUG_TRACE', false) === '1'),
+        DEBUG_SCREENSHOTS: (config('DEBUG_SCREENSHOTS', false) === '1'),
+        DEBUG_VISUALS: (config('DEBUG_VISUALS', false) === '1'),
     };
 }

@@ -4,7 +4,7 @@
 // Для видео добавлен фолбэк: при ошибке "wrong type of the web page content"
 // скачиваем файл сами и отправляем как multipart.
 
-import { log } from './lib/logger';
+import { log } from './shared/logger';
 
 // --- node helpers для видео-фолбэка ---
 import * as fs from 'node:fs';

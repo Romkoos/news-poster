@@ -1,5 +1,5 @@
 // src/parsers/web.ts
-import {log, logWarn} from '../lib/logger';
+import {log, logWarn} from '../shared/logger';
 import { stopAndFlush } from '../lib/browser_web';
 import { clickWithPolling, waitRoot, pickTextNode, extractTextFrom, findMessageRoot } from '../lib/scrape';
 import { extractImageUrl, extractVideoUrl } from '../lib/media';
@@ -17,7 +17,7 @@ import {ElementHandle} from "playwright";
 // Extend this list as needed.
 const EXCLUDED_AUTHORS = ["מבזקן 12", "דסק החוץ"];
 
-export async function runWeb(env: ReturnType<typeof import('../lib/env').readAppEnv>) {
+export async function runWeb(env: ReturnType<typeof import('../shared/config').readAppEnv>) {
     const db = initDb();
 
     const { ctx, page } = await bootAndOpenWeb(env.WEB_TARGET_URL, {
@@ -109,13 +109,6 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
 
         // крутить вверх нужно только если пул не помещается целиком
         const scrollUp = Math.max(0, Math.ceil(poolHeight - viewportH + SAFETY));
-
-        log(
-            '(WEB) ViewportH=%d, poolHeight=%d, scrollUp=%d (only if > 0)',
-            viewportH,
-            poolHeight,
-            scrollUp
-        );
 
         if (scrollUp > 0) {
             await page.mouse.wheel(0, -scrollUp);
@@ -222,7 +215,6 @@ export async function runWeb(env: ReturnType<typeof import('../lib/env').readApp
         }
     } finally {
         await stopAndFlush(ctx);
-        log('(WEB) Browser closed.');
     }
 }
 

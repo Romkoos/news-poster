@@ -4,17 +4,17 @@
 //
 // Почему вынесено в отдельный модуль:
 // - Упрощает читаемость основной логики скрейпинга.
-// - Позволяет централизованно управлять дебаг-фичами через .env (см. src/lib/env.ts).
+// - Позволяет централизованно управлять дебаг-фичами через .config (см. src/lib/config.ts).
 // - Легко расширять: можно добавлять прокси/профили/куки не трогая остальной код.
 
 import { chromium, Page, Browser, BrowserContext } from 'playwright';
 import * as path from 'path';
-import { ensureDirs } from './fsutil';
-import {log, logInfo} from './logger';
+import { ensureDirs } from '../shared/fsutil';
+import {log, logInfo} from '../shared/logger';
 
 /**
  * Опции запуска браузера/контекста.
- * Все флаги предназначены для удобной отладки и включаются через .env (см. readAppEnv()).
+ * Все флаги предназначены для удобной отладки и включаются через .config (см. readAppEnv()).
  * - headful: показывать окно браузера (false => headless)
  * - devtools: автоматически открыть вкладку DevTools
  * - recordVideo: писать видео сессии в debug-artifacts/video
@@ -72,7 +72,6 @@ export async function bootAndOpenWeb(url: string, opts: BootOpts = {}): Promise<
         });
     }
 
-    log('Goto:', url);
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     logInfo('Loaded:', page.url());
     return { browser, ctx, page };

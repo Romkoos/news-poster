@@ -5,7 +5,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { log } from './logger';
+import { log } from '../shared/logger';
 
 /**
  * Структура кеша приложения.

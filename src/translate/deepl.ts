@@ -1,5 +1,5 @@
 import * as deepl from 'deepl-node';
-import {log} from "../lib/logger";
+import {log} from "../shared/logger";
 
 const authKey = process.env.DEEPL_API_KEY;
 
