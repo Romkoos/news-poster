@@ -1,9 +1,9 @@
 // src/translate/index.ts
 import {log, logWarn} from '../shared/logger';
 import { heToRuDeepl } from './deepl';
-import { AppEnv } from "../shared/config";
+import { AppConfig } from "../shared/config";
 
-export async function heToRu(text: string, env: AppEnv): Promise<string> {
+export async function heToRu(text: string, env: AppConfig): Promise<string> {
     if (env.USE_DEEPL && env.DEEPL_API_KEY) {
         try {
             const t0 = Date.now();

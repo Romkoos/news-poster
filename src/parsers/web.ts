@@ -17,31 +17,42 @@ import {ElementHandle} from "playwright";
 // Extend this list as needed.
 const EXCLUDED_AUTHORS = ["מבזקן 12", "דסק החוץ"];
 
-export async function runWeb(env: ReturnType<typeof import('../shared/config').readAppEnv>) {
+// Keywords to exclude if found within the text content (original Hebrew text)
+// Extend this list as needed.
+const EXCLUDED_KEYWORDS = [
+    "חטופים",
+    "החטופים",
+    "החטופה",
+    "חטופה",
+    "החטוף",
+    "חטוף",
+];
+
+export async function runWeb(config: ReturnType<typeof import('../shared/config').readAppEnv>) {
     const db = initDb();
 
-    const { ctx, page } = await bootAndOpenWeb(env.WEB_TARGET_URL, {
-        headful: env.DEBUG_HEADFUL,
-        devtools: env.DEBUG_DEVTOOLS,
+    const { ctx, page } = await bootAndOpenWeb(config.WEB_TARGET_URL, {
+        headful: config.DEBUG_HEADFUL,
+        devtools: config.DEBUG_DEVTOOLS,
     });
 
     try {
-        if (env.CLICK_SELECTOR) {
-            const clicked = await clickWithPolling(page, env.CLICK_SELECTOR, {
-                nth: env.CLICK_INDEX,
-                totalMs: env.CLICK_POLL_SECONDS * 1000,
-                intervalMs: env.CLICK_POLL_INTERVAL_MS,
-                waitAfterClickSelector: env.ROOT_SELECTOR,
-                waitAfterClickMs: env.WAIT_AFTER_CLICK_MS,
+        if (config.CLICK_SELECTOR) {
+            const clicked = await clickWithPolling(page, config.CLICK_SELECTOR, {
+                nth: config.CLICK_INDEX,
+                totalMs: config.CLICK_POLL_SECONDS * 1000,
+                intervalMs: config.CLICK_POLL_INTERVAL_MS,
+                waitAfterClickSelector: config.ROOT_SELECTOR,
+                waitAfterClickMs: config.WAIT_AFTER_CLICK_MS,
             });
             if (!clicked) throw new Error('WEB: Click target not found within time budget.');
         }
 
-        await waitRoot(page, env.ROOT_SELECTOR, env.WAIT_FOR);
+        await waitRoot(page, config.ROOT_SELECTOR, config.WAIT_FOR);
 
         // Берём текстовые ноды внутри ленты (items[0] — самый свежий)
-        const { items } = await pickTextNode(page, env.ROOT_SELECTOR, 'first', 0);
-        const scanCount = Math.min(env.CHECK_LAST_N, items.length);
+        const { items } = await pickTextNode(page, config.ROOT_SELECTOR, 'first', 0);
+        const scanCount = Math.min(config.CHECK_LAST_N, items.length);
         log(`(WEB) Scan last N: ${scanCount} (from total ${items.length})`);
 
         // lastHash через БД (fallback — файл)
@@ -142,6 +153,19 @@ export async function runWeb(env: ReturnType<typeof import('../shared/config').r
                 }
             } catch {}
 
+            // Фильтрация по ключевым словам в тексте (исходный he)
+            try {
+                const kw = EXCLUDED_KEYWORDS.find((k) => k && q.textHe && q.textHe.includes(k));
+                if (kw) {
+                    log(`(WEB) Skipping by excluded keyword: "${kw}" (index=${q.index})`);
+                    if (q.height > 0) {
+                        await page.mouse.wheel(0, q.height);
+                        await page.waitForTimeout(100);
+                    }
+                    continue;
+                }
+            } catch {}
+
             // Дубликаты до перевода (по исходному he-тексту)
             try {
                 if (db.hasNewsHash(q.hash)) {
@@ -168,18 +192,18 @@ export async function runWeb(env: ReturnType<typeof import('../shared/config').r
 
                 // Перевод → публикация
                 const t0 = Date.now();
-                const textRu = await heToRu(q.textHe, env);
+                const textRu = await heToRu(q.textHe, config);
                 log(`(WEB) Translation ms:`, Date.now() - t0);
 
                 const videoUrl =
                     videoUrlCandidate && /\.m3u8(\?|#|$)/i.test(videoUrlCandidate) ? null : videoUrlCandidate;
 
                 if (videoUrl) {
-                    await sendVideo(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, videoUrl, textRu);
+                    await sendVideo(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, videoUrl, textRu);
                 } else if (imgUrl) {
-                    await sendPhoto(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, imgUrl, textRu);
+                    await sendPhoto(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, imgUrl, textRu);
                 } else {
-                    await sendPlain(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, textRu);
+                    await sendPlain(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, textRu);
                 }
 
                 // В БД сохраняем ТОЛЬКО переведённый текст (ru)
