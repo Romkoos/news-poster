@@ -79,7 +79,7 @@ app.get('/api/news', (req, res) => {
 });
 
 app.use('/api/users', usersRoutes);
-app.use('/filters', filtersRoutes);
+app.use('/api/filters', filtersRoutes);
 
 // POST /api/news/last-used — запись маркера по нажатию кнопки на фронте
 app.post('/api/news/last-used', (req, res) => {
