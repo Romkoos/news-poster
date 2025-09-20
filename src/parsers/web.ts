@@ -26,6 +26,8 @@ const EXCLUDED_KEYWORDS = [
     "חטופה",
     "החטוף",
     "חטוף",
+    "השבי",
+    "מהשבי",
 ];
 
 export async function runWeb(config: ReturnType<typeof import('../shared/config').readAppEnv>) {
