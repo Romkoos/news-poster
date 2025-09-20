@@ -6,6 +6,7 @@ import { initDb } from './api/news/db';
 const app = express();
 const db = initDb();
 import usersRoutes from './api/users/routes';
+import filtersRoutes from './api/filters/routes';
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
@@ -78,6 +79,7 @@ app.get('/api/news', (req, res) => {
 });
 
 app.use('/api/users', usersRoutes);
+app.use('/filters', filtersRoutes);
 
 // POST /api/news/last-used — запись маркера по нажатию кнопки на фронте
 app.post('/api/news/last-used', (req, res) => {
