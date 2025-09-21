@@ -169,6 +169,7 @@ router.get('/settings', (_req, res) => {
 router.patch('/settings', (req, res) => {
   try {
     const body = req.body ?? {};
+      console.log(body)
     if (typeof body.defaultAction !== 'undefined') {
       if (body.defaultAction !== 'publish' && body.defaultAction !== 'reject' && body.defaultAction !== 'moderation') {
         return res.status(400).json({ error: 'internal' });
