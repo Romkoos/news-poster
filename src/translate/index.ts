@@ -7,7 +7,7 @@ export async function heToRu(text: string, env: AppConfig): Promise<string> {
     if (env.USE_DEEPL && env.DEEPL_API_KEY) {
         try {
             const t0 = Date.now();
-            const out = await heToRuDeepl(text);
+            const out = await heToRuDeepl(text, env);
             log('DeepL OK in ms:', Date.now() - t0);
             return out;
         } catch (e: any) {
