@@ -2,14 +2,12 @@ import * as deepl from 'deepl-node';
 import {log} from "../shared/logger";
 import {AppConfig} from "../shared/config";
 
-const authKey = process.env.DEEPL_API_KEY;
-
 let translator: deepl.Translator | null = null;
 
 function getTranslator(apiKey: string): deepl.Translator {
     if (!apiKey) throw new Error('DEEPL_API_KEY is missing');
     if (!translator) {
-        translator = new deepl.Translator(authKey);
+        translator = new deepl.Translator(apiKey);
         log('DeepL translator initialized.');
     }
     return translator;
