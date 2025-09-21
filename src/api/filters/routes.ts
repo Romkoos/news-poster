@@ -104,6 +104,34 @@ router.post('/', (req, res) => {
   }
 });
 
+// GET /filters/settings → { defaultAction }
+router.get('/settings', (_req, res) => {
+    try {
+        const s = getSettings();
+        res.json(s);
+    } catch {
+        res.status(500).json({ error: 'internal' });
+    }
+});
+
+// PATCH /filters/settings (Partial<Settings>) → { defaultAction }
+router.patch('/settings', (req, res) => {
+    try {
+        const body = req.body ?? {};
+        console.log(body)
+        if (typeof body.defaultAction !== 'undefined') {
+            if (body.defaultAction !== 'publish' && body.defaultAction !== 'reject' && body.defaultAction !== 'moderation') {
+                return res.status(400).json({ error: 'internal' });
+            }
+        }
+        const s = patchSettings(body);
+        res.json(s);
+    } catch {
+        res.status(500).json({ error: 'internal' });
+    }
+});
+
+
 // PATCH /filters/:id (Partial<FilterInput>) → Filter
 router.patch('/:id', (req, res) => {
   try {
@@ -155,31 +183,5 @@ router.delete('/:id', (req, res) => {
   }
 });
 
-// GET /filters/settings → { defaultAction }
-router.get('/settings', (_req, res) => {
-  try {
-    const s = getSettings();
-    res.json(s);
-  } catch {
-    res.status(500).json({ error: 'internal' });
-  }
-});
-
-// PATCH /filters/settings (Partial<Settings>) → { defaultAction }
-router.patch('/settings', (req, res) => {
-  try {
-    const body = req.body ?? {};
-      console.log(body)
-    if (typeof body.defaultAction !== 'undefined') {
-      if (body.defaultAction !== 'publish' && body.defaultAction !== 'reject' && body.defaultAction !== 'moderation') {
-        return res.status(400).json({ error: 'internal' });
-      }
-    }
-    const s = patchSettings(body);
-    res.json(s);
-  } catch {
-    res.status(500).json({ error: 'internal' });
-  }
-});
 
 export default router;
