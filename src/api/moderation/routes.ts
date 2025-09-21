@@ -52,10 +52,10 @@ router.post('/:id/approve', async (req, res) => {
 
     // proceed to publish (translate -> media -> telegram -> record hash)
     try {
-      const env = readAppEnv();
+      const config = readAppEnv();
       const db = initDb();
       const hash = sha1(item.textHe);
-      const textRu = await heToRu(item.textHe, env);
+      const textRu = await heToRu(item.textHe, config);
 
       let media = item.media || undefined;
       // Align with parser: ignore HLS playlists (.m3u8) — send plain text instead
@@ -65,11 +65,11 @@ router.post('/:id/approve', async (req, res) => {
       const isVideo = !!media && /\.(mp4|mov|webm|mkv)(\?|#|$)/i.test(media);
 
       if (media && isVideo) {
-        await sendVideo(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, media, textRu);
+        await sendVideo(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, media, textRu);
       } else if (media) {
-        await sendPhoto(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, media, textRu);
+        await sendPhoto(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, media, textRu);
       } else {
-        await sendPlain(env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_CHAT_ID, textRu);
+        await sendPlain(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, textRu);
       }
 
       try {
