@@ -53,6 +53,7 @@ router.post('/:id/approve', async (req, res) => {
     // proceed to publish (translate -> media -> telegram -> record hash)
     try {
       const config = readAppEnv();
+      console.log(config.DEEPL_API_KEY)
       const db = initDb();
       const hash = sha1(item.textHe);
       const textRu = await heToRu(item.textHe, config);
