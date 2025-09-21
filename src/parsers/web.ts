@@ -183,6 +183,14 @@ export async function runWeb(config: ReturnType<typeof import('../shared/config'
                     const videoOk = videoUrlCandidate && !/\.m3u8(\?|#|$)/i.test(String(videoUrlCandidate));
                     const media: string | undefined = videoOk ? String(videoUrlCandidate) : (imgUrl || undefined);
                     insertModerationItem(q.textHe, winner?.id || '00000000-0000-0000-0000-000000000000', media);
+                    // Save hash immediately to avoid duplicates; store original HE text for now.
+                    try {
+                        db.addNews(q.textHe, q.hash, Date.now());
+                    } catch (e) {
+                        log('(WEB) db.addNews (moderation) failed:', e);
+                    }
+                    // Advance boundary to avoid reprocessing
+                    lastBoundaryHash = q.hash;
                 } catch (e) {
                     logWarn('(WEB) Failed to create moderation item:', e);
                 }

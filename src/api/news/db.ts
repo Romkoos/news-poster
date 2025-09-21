@@ -46,8 +46,12 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
     `);
 
     const newsInsert = db.prepare(`
-        INSERT OR IGNORE INTO news(ts, date, hash, text)
-    VALUES(@ts, @date, @hash, @text)
+        INSERT INTO news(ts, date, hash, text)
+        VALUES(@ts, @date, @hash, @text)
+        ON CONFLICT(hash) DO UPDATE SET
+          ts = excluded.ts,
+          date = excluded.date,
+          text = excluded.text
     `);
 
     const newsByDate = db.prepare(`

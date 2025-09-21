@@ -57,7 +57,11 @@ router.post('/:id/approve', async (req, res) => {
       const hash = sha1(item.textHe);
       const textRu = await heToRu(item.textHe, env);
 
-      const media = item.media;
+      let media = item.media || undefined;
+      // Align with parser: ignore HLS playlists (.m3u8) — send plain text instead
+      if (media && /\.m3u8(\?|#|$)/i.test(media)) {
+        media = undefined;
+      }
       const isVideo = !!media && /\.(mp4|mov|webm|mkv)(\?|#|$)/i.test(media);
 
       if (media && isVideo) {
