@@ -12,23 +12,15 @@ import { bootAndOpenWeb } from '../lib/browser_web';
 // DB
 import { initDb } from '../api/news/db';
 import {ElementHandle} from "playwright";
+// Filters & Moderation
+import { listFilters, getSettings } from '../api/filters/db';
+import { insertModerationItem } from '../api/moderation/db';
 
 // Authors/sources to exclude by header name inside .mc-message-header__name
 // Extend this list as needed.
 const EXCLUDED_AUTHORS = ["מבזקן 12", "דסק החוץ"];
 
-// Keywords to exclude if found within the text content (original Hebrew text)
-// Extend this list as needed.
-const EXCLUDED_KEYWORDS = [
-    "חטופים",
-    "החטופים",
-    "החטופה",
-    "חטופה",
-    "החטוף",
-    "חטוף",
-    "השבי",
-    "מהשבי",
-];
+// Keywords filtering moved to DB-driven Filters (substring/regex) with priority.
 
 export async function runWeb(config: ReturnType<typeof import('../shared/config').readAppEnv>) {
     const db = initDb();
@@ -129,7 +121,11 @@ export async function runWeb(config: ReturnType<typeof import('../shared/config'
         }
 
 
-        let lastPostedHash: string | null = null;
+        // Load active filters and settings once
+        const allFilters = listFilters().filter(f => f.active);
+        const settings = getSettings();
+
+        let lastBoundaryHash: string | null = null;
 
         for (let i = 0; i < oldestFirst.length; i++) {
             const q = oldestFirst[i];
@@ -155,18 +151,47 @@ export async function runWeb(config: ReturnType<typeof import('../shared/config'
                 }
             } catch {}
 
-            // Фильтрация по ключевым словам в тексте (исходный he)
-            try {
-                const kw = EXCLUDED_KEYWORDS.find((k) => k && q.textHe && q.textHe.includes(k));
-                if (kw) {
-                    log(`(WEB) Skipping by excluded keyword: "${kw}" (index=${q.index})`);
-                    if (q.height > 0) {
-                        await page.mouse.wheel(0, q.height);
-                        await page.waitForTimeout(100);
-                    }
-                    continue;
+            // Фильтрация по правилам из БД (substring/regex) с приоритетами
+            const matches = allFilters.filter(f => {
+                if (!q.textHe) return false;
+                if ((f.matchType ?? 'substring') === 'regex') {
+                    return new RegExp(f.keyword, 'u').test(q.textHe);
                 }
-            } catch {}
+                return q.textHe.includes(f.keyword);
+            });
+            const winner = matches[0];
+            const action = (winner?.action ?? settings.defaultAction);
+
+            if (action === 'reject') {
+                log(`(WEB) Reject by filter: ${winner?.id || '<default>'} (index=${q.index})`);
+                // сохраняем граничный хеш для будущих прогонов
+                lastBoundaryHash = q.hash;
+                if (q.height > 0) {
+                    await page.mouse.wheel(0, q.height);
+                    await page.waitForTimeout(100);
+                }
+                continue;
+            }
+
+            if (action === 'moderation') {
+                try {
+                    const messageRoot = await findMessageRoot(q.handle);
+                    const [imgUrl, videoUrlCandidate] = await Promise.all([
+                        extractImageUrl(page, messageRoot),
+                        extractVideoUrl(page, messageRoot),
+                    ]);
+                    const videoOk = videoUrlCandidate && !/\.m3u8(\?|#|$)/i.test(String(videoUrlCandidate));
+                    const media: string | undefined = videoOk ? String(videoUrlCandidate) : (imgUrl || undefined);
+                    insertModerationItem(q.textHe, winner?.id || '00000000-0000-0000-0000-000000000000', media);
+                } catch (e) {
+                    logWarn('(WEB) Failed to create moderation item:', e);
+                }
+                if (q.height > 0) {
+                    await page.mouse.wheel(0, q.height);
+                    await page.waitForTimeout(100);
+                }
+                continue;
+            }
 
             // Дубликаты до перевода (по исходному he-тексту)
             try {
@@ -215,7 +240,7 @@ export async function runWeb(config: ReturnType<typeof import('../shared/config'
                     log('(WEB) db.addNews failed:', e);
                 }
 
-                lastPostedHash = q.hash;
+                lastBoundaryHash = q.hash;
             } catch (e) {
                 log(`(WEB) Item failed, continue:`, e);
             } finally {
@@ -227,14 +252,14 @@ export async function runWeb(config: ReturnType<typeof import('../shared/config'
             }
         }
 
-        if (lastPostedHash) {
+        if (lastBoundaryHash) {
             try {
-                db.setLastHash(lastPostedHash);
-                log('(WEB) DB lastHash updated:', lastPostedHash);
+                db.setLastHash(lastBoundaryHash);
+                log('(WEB) DB lastHash updated:', lastBoundaryHash);
             } catch (e) {
                 log('(WEB) DB setLastHash failed, fallback to file cache:', e);
-                await writeCache({ lastHash: lastPostedHash });
-                log('(WEB) Cache updated (file):', lastPostedHash);
+                await writeCache({ lastHash: lastBoundaryHash });
+                log('(WEB) Cache updated (file):', lastBoundaryHash);
             }
         } else {
             log('(WEB) Nothing posted — cache not updated.');

@@ -80,6 +80,8 @@ app.get('/api/news', (req, res) => {
 
 app.use('/api/users', usersRoutes);
 app.use('/api/filters', filtersRoutes);
+import moderationRoutes from './api/moderation/routes';
+app.use('/api/moderation', moderationRoutes);
 
 // POST /api/news/last-used — запись маркера по нажатию кнопки на фронте
 app.post('/api/news/last-used', (req, res) => {
