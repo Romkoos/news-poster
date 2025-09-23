@@ -1,5 +1,6 @@
 import { db } from '../auth/db';
 import { randomUUID } from 'node:crypto';
+import { nowMs } from '../../shared/time';
 
 export type UUID = string;
 export type FilterAction = 'publish' | 'reject' | 'moderation';
@@ -55,15 +56,13 @@ function ensureSchema() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS settings (
       id INTEGER PRIMARY KEY CHECK(id = 1),
-      default_action TEXT NOT NULL CHECK(default_action IN ('publish','reject','moderation')) DEFAULT 'moderation',
+      default_action TEXT NOT NULL CHECK(default_action IN ('publish','reject','moderation')) DEFAULT 'publish',
       updated_at INTEGER NOT NULL
     );
   `);
 }
 
 ensureSchema();
-
-export function nowMs() { return Date.now(); }
 
 export function rowToApi(row: DbFilterRow): FilterApiShape {
   return {
@@ -155,13 +154,13 @@ export type Settings = { defaultAction: FilterAction };
 
 export function getSettings(): Settings {
   const row = db.prepare(`SELECT default_action, updated_at FROM settings WHERE id = 1`).get() as { default_action: FilterAction; updated_at: number } | undefined;
-  if (!row) return { defaultAction: 'moderation' };
+  if (!row) return { defaultAction: 'publish' };
   return { defaultAction: row.default_action };
 }
 
 export function patchSettings(patch: Partial<Settings>): Settings {
   const existing = db.prepare(`SELECT default_action FROM settings WHERE id = 1`).get() as { default_action: FilterAction } | undefined;
-  const next: Settings = { defaultAction: patch.defaultAction ?? existing?.default_action ?? 'moderation' };
+  const next: Settings = { defaultAction: patch.defaultAction ?? existing?.default_action ?? 'publish' };
   const updated_at = nowMs();
   db.prepare(`
     INSERT INTO settings(id, default_action, updated_at) VALUES(1, ?, ?)

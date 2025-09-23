@@ -1,18 +1,20 @@
-import {logError, log, logInfo, logWarn} from './shared/logger';
+import { logError, log, logInfo, logWarn } from './shared/logger';
 import { readAppEnv } from './shared/config';
-import { runWeb } from './parsers/web';
+import { selectParser } from './parsers';
 
 async function main() {
     const env = readAppEnv();
 
     try {
-        await runWeb(env);
-        logInfo('WEB parser completed successfully.');
+        const parser = selectParser(env.PARSER_TYPE);
+        await parser.run(env);
+        logInfo(`${parser.name.toUpperCase()} parser completed successfully.`);
         log('----------------------------------------------');
         log(' ');
         return;
-    } catch (e) {
-        logWarn('WEB parser failed as well:', e.message);
+    } catch (e: any) {
+        const msg = e?.message || String(e);
+        logWarn('Parser run failed:', msg);
         throw e; // пусть pm2 увидит фейл и перезапустит по расписанию
     }
 }

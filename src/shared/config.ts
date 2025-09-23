@@ -29,6 +29,8 @@ export function config(name: string, required = true): string {
  * Флаги DEBUG_* позволяют тонко управлять поведением браузера и артефактами.
  */
 export type AppConfig = {
+    PARSER_TYPE: string;                 // which parser to run (registry key), default: "web"
+
     MOBILE_TARGET_URL: string;
     WEB_TARGET_URL: string;
     LIST_ITEM_SELECTOR: string;
@@ -63,6 +65,8 @@ export type AppConfig = {
  */
 export function readAppEnv(): AppConfig {
     return {
+        PARSER_TYPE: (config('PARSER_TYPE', false) || 'web').toLowerCase(),
+
         MOBILE_TARGET_URL: config('MOBILE_TARGET_URL'),
         WEB_TARGET_URL: config('WEB_TARGET_URL'),
         LIST_ITEM_SELECTOR: config('LIST_ITEM_SELECTOR'),

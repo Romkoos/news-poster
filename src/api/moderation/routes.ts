@@ -6,6 +6,7 @@ import { heToRu } from '../../translate';
 import { sendPhoto, sendPlain, sendVideo } from '../../telegram';
 import { initDb } from '../news/db';
 import { readAppEnv } from '../../shared/config';
+import { isHlsPlaylist } from '../../shared/media';
 
 const router = Router();
 
@@ -59,7 +60,7 @@ router.post('/:id/approve', async (req, res) => {
 
       let media = item.media || undefined;
       // Align with parser: ignore HLS playlists (.m3u8) — send plain text instead
-      if (media && /\.m3u8(\?|#|$)/i.test(media)) {
+      if (media && isHlsPlaylist(media)) {
         media = undefined;
       }
       const isVideo = !!media && /\.(mp4|mov|webm|mkv)(\?|#|$)/i.test(media);

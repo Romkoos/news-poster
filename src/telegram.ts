@@ -5,6 +5,7 @@
 // скачиваем файл сами и отправляем как multipart.
 
 import { log } from './shared/logger';
+import { isHlsPlaylist } from './shared/media';
 
 // --- node helpers для видео-фолбэка ---
 import * as fs from 'node:fs';
@@ -190,7 +191,7 @@ export async function sendVideo(
     caption?: string
 ) {
     // Telegram не принимает .m3u8 в sendVideo по URL — сразу пропускаем.
-    if (/\.m3u8(\?|#|$)/i.test(videoUrl)) {
+    if (isHlsPlaylist(videoUrl)) {
         log('sendVideo skipped: HLS (.m3u8) is not supported by Telegram sendVideo URL', { videoUrl });
         return;
     }

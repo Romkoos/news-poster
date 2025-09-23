@@ -1,22 +1,11 @@
 // src/lib/db.ts
 import Database from 'better-sqlite3';
 import * as path from 'node:path';
-import * as fs from 'node:fs';
-
-function ensureDir(dir: string) {
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
-
-function todayLocal(): string {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-}
+import { ensureDirs } from '../../shared/fsutil';
+import { todayLocal } from '../../shared/time';
 
 export function initDb(dbPath = path.resolve('data', 'news.db')) {
-    ensureDir(path.dirname(dbPath));
+    ensureDirs([path.dirname(dbPath)]);
     const db = new Database(dbPath);
 
     db.pragma('journal_mode = WAL');

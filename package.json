@@ -1,6 +1,6 @@
 {
   "name": "news-poster",
-  "version": "1.0.3",
+  "version": "0.2.0",
   "main": "index.js",
   "scripts": {
     "start": "ts-node src/index.ts",
