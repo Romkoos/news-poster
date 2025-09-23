@@ -233,3 +233,22 @@ export async function sendVideo(
         try { fs.unlinkSync(tmp); } catch {}
     }
 }
+
+export async function editMessageText(
+    token: string,
+    chatId: string,
+    messageId: number,
+    newText: string
+): Promise<void> {
+    // Форматируем как sendPlain: экранируем и добавляем футер, затем ограничиваем длину
+    const ready = withFooterMdV2(newText);
+    const chunk = ready.length > TEXT_CHUNK ? ready.slice(0, TEXT_CHUNK) : ready;
+    const url = `https://api.telegram.org/bot${token}/editMessageText`;
+    await postJSON(url, {
+        chat_id: chatId,
+        message_id: messageId,
+        text: chunk + ' 1',
+        disable_web_page_preview: true,
+        parse_mode: 'MarkdownV2',
+    });
+}

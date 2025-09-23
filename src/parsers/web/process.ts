@@ -2,7 +2,7 @@ import type { Page } from 'playwright';
 import { findMessageRoot } from './scrape';
 import { extractImageUrl, extractVideoUrl } from './media';
 import { heToRu } from '../../translate';
-import { sendPlain, sendPhoto, sendVideo } from '../../telegram';
+import { sendPlain, sendPhoto, sendVideo, editMessageText } from '../../telegram';
 import { log, logWarn } from '../../shared/logger';
 import { isHlsPlaylist } from '../../shared/media';
 import type { EnrichedItem, AppConfig, ProcessResult } from './types';
@@ -75,6 +75,37 @@ export async function handlePublish(page: Page, q: EnrichedItem, config: AppConf
     return { status: 'posted', boundaryHash: q.hash };
   } catch (e) {
     log('(WEB) Item failed, continue:', e);
+    return { status: 'error', error: e };
+  }
+}
+
+export async function handleEditExisting(page: Page, q: EnrichedItem, config: AppConfig, db: NewsDb, existingNewsId: number): Promise<ProcessResult> {
+  try {
+    // Переводим текст как в обычной публикации
+    const t0 = Date.now();
+    const textRu = await heToRu(q.textHe, config);
+    log('(WEB) Translation ms (edit):', Date.now() - t0);
+
+    // Ищем message_id по ID новости
+    const msgId = db.getTelegramMessageIdById(existingNewsId);
+    if (!msgId) {
+      logWarn('(WEB) handleEditExisting: tg_message_id not found for news id', existingNewsId);
+      return { status: 'error', error: new Error('No tg_message_id') };
+    }
+
+    // Редактируем текст существующего сообщения
+    await editMessageText(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, msgId, textRu);
+
+    // Фиксируем новый хеш в БД, привязывая к тому же message_id
+    try {
+      db.addNews(q.textHe, q.hash, Date.now(), textRu, msgId);
+    } catch (e) {
+      log('(WEB) db.addNews (edit) failed:', e);
+    }
+
+    return { status: 'posted', boundaryHash: q.hash };
+  } catch (e) {
+    logWarn('(WEB) handleEditExisting failed:', e);
     return { status: 'error', error: e };
   }
 }

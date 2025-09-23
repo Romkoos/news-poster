@@ -5,7 +5,7 @@ import { initDb } from '../../api/news/db';
 import { buildQueue } from './extractQueue';
 import { enrichItems } from './enrichItems';
 import { loadFiltersBundle, isExcludedByAuthor, decideAction } from './filters';
-import { hasDuplicate, handleModeration, handlePublish } from './process';
+import { hasDuplicate, handleModeration, handlePublish, handleEditExisting } from './process';
 import { compareArrays } from '../../shared/compareArrays';
 
 export async function webParser(config: ReturnType<typeof import('../../shared/config').readAppEnv>) {
@@ -107,14 +107,31 @@ export async function webParser(config: ReturnType<typeof import('../../shared/c
       // Similarity check with last 10 published news (word-by-word positional comparison)
       try {
         const recent = db.getLastNews(10);
+
         const incomingWords = String(q.textHe || '').trim().split(/\s+/).filter(Boolean);
+        let best: { id: number; score: number } | null = null;
+
         for (const r of recent) {
           const words = String(r.text_original || '').trim().split(/\s+/).filter(Boolean);
           const score = compareArrays(incomingWords, words);
 
-          if (score >= 75) {
-            // As requested: output the id of the similar news to console
-            logWarn('r.id:', r.id);
+          if (score >= 75 && (!best || score > best.score)) {
+            best = { id: r.id, score };
+          }
+        }
+        if (best) {
+          logWarn('(WEB) Similar to existing, editing instead of publishing. newsId=', best.id, 'score=', best.score);
+          const res = await handleEditExisting(page, q, config, db, best.id);
+          if (res.status === 'posted') {
+            if (res.boundaryHash) lastBoundaryHash = res.boundaryHash;
+            if (q.height > 0) {
+              await page.mouse.wheel(0, q.height);
+              await page.waitForTimeout(100);
+            }
+            continue; // успешно отредактировали — прокрутили и переходим к следующему
+          } else {
+            logWarn('(WEB) Edit failed, falling back to publish. newsId=', best.id);
+            // не делаем прокрутку здесь: она выполнится в блоке публикации ниже
           }
         }
       } catch (e) {

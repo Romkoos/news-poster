@@ -71,10 +71,12 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         WHERE date <> ?
     `);
 
+    const tgMsgIdByIdStmt = db.prepare(`SELECT tg_message_id FROM news WHERE id = ?`);
+
     // NEW: быстрый проверочный запрос по хешу
     const newsHasHashStmt = db.prepare(`SELECT 1 FROM news WHERE hash = ? LIMIT 1`);
     const latestNewsIdStmt = db.prepare(`SELECT id FROM news ORDER BY id DESC LIMIT 1`);
-    const lastNewsStmt = db.prepare(`SELECT id, COALESCE(text, text_original, '') as text FROM news ORDER BY id DESC LIMIT ?`);
+    const lastNewsStmt = db.prepare(`SELECT id, text_original FROM news ORDER BY id DESC LIMIT ?`);
 
     const setTgMsgIdByHash = db.prepare(`
         UPDATE news SET tg_message_id = @tg_message_id WHERE hash = @hash
@@ -149,6 +151,13 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         getLastNews(limit: number): Array<{ id: number; text_original: string }> {
             const lim = Math.max(1, Math.min(100, Math.floor(Number(limit)) || 10));
             return lastNewsStmt.all(lim) as Array<{ id: number; text_original: string }>;
+        },
+
+        // NEW: получить tg_message_id по id записи
+        getTelegramMessageIdById(id: number): number | null {
+            const row = tgMsgIdByIdStmt.get(id) as { tg_message_id?: number } | undefined;
+            const mid = row?.tg_message_id;
+            return (typeof mid === 'number' && Number.isFinite(mid) && mid > 0) ? Math.floor(mid) : null;
         },
     };
 }
