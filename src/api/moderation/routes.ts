@@ -65,16 +65,17 @@ router.post('/:id/approve', async (req, res) => {
       }
       const isVideo = !!media && /\.(mp4|mov|webm|mkv)(\?|#|$)/i.test(media);
 
+      let messageId: number | null = null;
       if (media && isVideo) {
-        await sendVideo(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, media, textRu);
+        messageId = await sendVideo(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, media, textRu);
       } else if (media) {
-        await sendPhoto(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, media, textRu);
+        messageId = await sendPhoto(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, media, textRu);
       } else {
-        await sendPlain(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, textRu);
+        messageId = await sendPlain(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, textRu);
       }
 
       try {
-        db.addNews(textRu, hash, Date.now());
+        db.addNews(item.textHe, hash, Date.now(), textRu, messageId ?? null);
       } catch {
         // ignore persistence failure per simple behavior
       }

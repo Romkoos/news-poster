@@ -32,7 +32,8 @@ export async function handleModeration(page: Page, q: EnrichedItem, db: NewsDb, 
     const media: string | undefined = videoOk ? String(videoUrlCandidate) : (imgUrl || undefined);
     insertModerationItem(q.textHe, filterId || ZERO_UUID, media);
     try {
-      db.addNews(q.textHe, q.hash, Date.now());
+      // сохраняем только оригинальный текст (без перевода и без message_id)
+      db.addNews(q.textHe, q.hash, Date.now(), null, null);
     } catch (e) {
       log('(WEB) db.addNews (moderation) failed:', e);
     }
@@ -57,16 +58,17 @@ export async function handlePublish(page: Page, q: EnrichedItem, config: AppConf
 
     const videoUrl = videoUrlCandidate && isHlsPlaylist(videoUrlCandidate) ? null : videoUrlCandidate;
 
+    let messageId: number | null = null;
     if (videoUrl) {
-      await sendVideo(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, String(videoUrl), textRu);
+      messageId = await sendVideo(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, String(videoUrl), textRu);
     } else if (imgUrl) {
-      await sendPhoto(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, imgUrl, textRu);
+      messageId = await sendPhoto(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, imgUrl, textRu);
     } else {
-      await sendPlain(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, textRu);
+      messageId = await sendPlain(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID, textRu);
     }
 
     try {
-      db.addNews(textRu, q.hash, Date.now());
+      db.addNews(q.textHe, q.hash, Date.now(), textRu, messageId ?? null);
     } catch (e) {
       log('(WEB) db.addNews failed:', e);
     }

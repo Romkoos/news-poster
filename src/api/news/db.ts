@@ -18,15 +18,29 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         )
     `).run();
 
+    // base table (without new columns) — created if not exists
     db.prepare(`
         CREATE TABLE IF NOT EXISTS news (
                                             id    INTEGER PRIMARY KEY AUTOINCREMENT,
                                             ts    INTEGER NOT NULL,
                                             date  TEXT    NOT NULL,
                                             hash  TEXT    NOT NULL UNIQUE,
-                                            text  TEXT    NOT NULL
+                                            text_original TEXT,
+                                            text  TEXT,
+                                            tg_message_id INTEGER
         )
     `).run();
+
+    // lightweight migration: add columns if missing
+    const cols = db.prepare(`PRAGMA table_info(news)`).all() as Array<{ name: string }>;
+    const names = new Set(cols.map(c => c.name));
+    if (!names.has('text_original')) {
+        db.prepare(`ALTER TABLE news ADD COLUMN text_original TEXT`).run();
+    }
+    if (!names.has('tg_message_id')) {
+        db.prepare(`ALTER TABLE news ADD COLUMN tg_message_id INTEGER`).run();
+    }
+    // ensure text can be NULL (older schema had NOT NULL). We won't alter constraint; just handle NULLs in code.
 
     const metaGet = db.prepare('SELECT value FROM meta WHERE key = ?');
     const metaSet = db.prepare(`
@@ -35,16 +49,18 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
     `);
 
     const newsInsert = db.prepare(`
-        INSERT INTO news(ts, date, hash, text)
-        VALUES(@ts, @date, @hash, @text)
+        INSERT INTO news(ts, date, hash, text_original, text, tg_message_id)
+        VALUES(@ts, @date, @hash, @text_original, @text, @tg_message_id)
         ON CONFLICT(hash) DO UPDATE SET
           ts = excluded.ts,
           date = excluded.date,
-          text = excluded.text
+          text_original = COALESCE(excluded.text_original, news.text_original),
+          text = COALESCE(excluded.text, news.text),
+          tg_message_id = COALESCE(excluded.tg_message_id, news.tg_message_id)
     `);
 
     const newsByDate = db.prepare(`
-        SELECT id, ts, date, hash, text
+        SELECT id, ts, date, hash, COALESCE(text, text_original, '') as text
         FROM news
         WHERE date = ?
         ORDER BY ts ASC
@@ -58,7 +74,11 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
     // NEW: быстрый проверочный запрос по хешу
     const newsHasHashStmt = db.prepare(`SELECT 1 FROM news WHERE hash = ? LIMIT 1`);
     const latestNewsIdStmt = db.prepare(`SELECT id FROM news ORDER BY id DESC LIMIT 1`);
-    const lastNewsStmt = db.prepare(`SELECT id, text FROM news ORDER BY id DESC LIMIT ?`);
+    const lastNewsStmt = db.prepare(`SELECT id, COALESCE(text, text_original, '') as text FROM news ORDER BY id DESC LIMIT ?`);
+
+    const setTgMsgIdByHash = db.prepare(`
+        UPDATE news SET tg_message_id = @tg_message_id WHERE hash = @hash
+    `);
 
     return {
         raw: db,
@@ -90,9 +110,22 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
             return Number.isFinite(id) && id > 0 ? id : 0;
         },
 
-        // сохраняем уже ПЕРЕВЕДЁННЫЙ текст (ru)
-        addNews(text: string, hash: string, ts: number = Date.now()): void {
-            newsInsert.run({ ts, date: todayLocal(), hash, text });
+        // сохраняем оригинал и перевод (если есть), а также message_id
+        addNews(textOriginal: string, hash: string, ts: number = Date.now(), textTranslated?: string | null, tgMessageId?: number | null): void {
+            newsInsert.run({
+                ts,
+                date: todayLocal(),
+                hash,
+                text_original: textOriginal,
+                // fallback: keep compatibility with older DBs where text might be NOT NULL
+                text: textTranslated ?? textOriginal,
+                tg_message_id: tgMessageId ?? null,
+            });
+        },
+
+        // точечное обновление message_id при необходимости
+        setTelegramMessageIdByHash(hash: string, tgMessageId: number): void {
+            setTgMsgIdByHash.run({ hash, tg_message_id: tgMessageId });
         },
 
         getNewsFor(date: string) {
@@ -113,9 +146,9 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         },
 
         // NEW: последние N новостей (по id DESC)
-        getLastNews(limit: number): Array<{ id: number; text: string }> {
+        getLastNews(limit: number): Array<{ id: number; text_original: string }> {
             const lim = Math.max(1, Math.min(100, Math.floor(Number(limit)) || 10));
-            return lastNewsStmt.all(lim) as Array<{ id: number; text: string }>;
+            return lastNewsStmt.all(lim) as Array<{ id: number; text_original: string }>;
         },
     };
 }

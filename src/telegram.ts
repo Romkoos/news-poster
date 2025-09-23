@@ -115,7 +115,7 @@ async function uploadVideoMultipart(
     chatId: string,
     filePath: string,
     caption?: string
-) {
+): Promise<number> {
     // 1) читаем файл в Buffer
     const buf = await fs.promises.readFile(filePath);
 
@@ -142,24 +142,30 @@ async function uploadVideoMultipart(
         const text = await res.text().catch(() => '');
         throw new Error(`sendVideo multipart failed: ${res.status} ${text || res.statusText}`);
     }
+    const data = await res.json() as { ok: boolean; result?: { message_id?: number } };
+    if (!data?.ok || !data.result?.message_id) throw new Error('sendVideo multipart: no message_id in response');
+    return data.result.message_id;
 }
 
 
 // -------- public API --------
 
-export async function sendPlain(token: string, chatId: string, text: string) {
+export async function sendPlain(token: string, chatId: string, text: string): Promise<number | null> {
     // ВАЖНО: сначала экранируем и добавляем футер, потом режем
     const ready = withFooterMdV2(text);
+    let firstMessageId: number | null = null;
     for (let i = 0; i < ready.length; i += TEXT_CHUNK) {
         const chunk = ready.slice(i, i + TEXT_CHUNK);
         const url = `https://api.telegram.org/bot${token}/sendMessage`;
-        await postJSON(url, {
+        const resp = await postJSON<{ ok: boolean; result?: { message_id?: number } }>(url, {
             chat_id: chatId,
             text: chunk,
             disable_web_page_preview: true,
             parse_mode: 'MarkdownV2',
         });
+        if (firstMessageId == null) firstMessageId = resp?.result?.message_id ?? null;
     }
+    return firstMessageId;
 }
 
 export async function sendPhoto(
@@ -167,7 +173,7 @@ export async function sendPhoto(
     chatId: string,
     photoUrl: string,
     caption?: string
-) {
+): Promise<number | null> {
     const url = `https://api.telegram.org/bot${token}/sendPhoto`;
     const finalCaption = clipCaption(withFooterMdV2(caption));
     const payload = {
@@ -178,7 +184,8 @@ export async function sendPhoto(
     };
 
     try {
-        await postJSON(url, payload);
+        const resp = await postJSON<{ ok: boolean; result?: { message_id?: number } }>(url, payload);
+        return resp?.result?.message_id ?? null;
     } catch (e: any) {
         throw new Error(`sendPhoto failed: ${String(e?.message || e)}`);
     }
@@ -189,11 +196,11 @@ export async function sendVideo(
     chatId: string,
     videoUrl: string,
     caption?: string
-) {
+): Promise<number | null> {
     // Telegram не принимает .m3u8 в sendVideo по URL — сразу пропускаем.
     if (isHlsPlaylist(videoUrl)) {
         log('sendVideo skipped: HLS (.m3u8) is not supported by Telegram sendVideo URL', { videoUrl });
-        return;
+        return null;
     }
 
     const url = `https://api.telegram.org/bot${token}/sendVideo`;
@@ -208,8 +215,8 @@ export async function sendVideo(
 
     // 1) пробуем отдать ссылку напрямую
     try {
-        await postJSON(url, payload);
-        return;
+        const resp = await postJSON<{ ok: boolean; result?: { message_id?: number } }>(url, payload);
+        return resp?.result?.message_id ?? null;
     } catch (e: any) {
         const msg = String(e?.message || e);
         // если это не "wrong type…" — пробрасываем как есть
@@ -220,7 +227,8 @@ export async function sendVideo(
     // 2) фолбэк: скачиваем и шлём multipart
     const tmp = await downloadToTemp(videoUrl, 'video.mp4');
     try {
-        await uploadVideoMultipart(token, chatId, tmp, finalCaption);
+        const id = await uploadVideoMultipart(token, chatId, tmp, finalCaption);
+        return id ?? null;
     } finally {
         try { fs.unlinkSync(tmp); } catch {}
     }

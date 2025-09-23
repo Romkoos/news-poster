@@ -109,7 +109,7 @@ export async function webParser(config: ReturnType<typeof import('../../shared/c
         const recent = db.getLastNews(10);
         const incomingWords = String(q.textHe || '').trim().split(/\s+/).filter(Boolean);
         for (const r of recent) {
-          const words = String(r.text || '').trim().split(/\s+/).filter(Boolean);
+          const words = String(r.text_original || '').trim().split(/\s+/).filter(Boolean);
           const score = compareArrays(incomingWords, words);
 
           if (score >= 75) {
