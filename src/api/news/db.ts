@@ -58,6 +58,7 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
     // NEW: быстрый проверочный запрос по хешу
     const newsHasHashStmt = db.prepare(`SELECT 1 FROM news WHERE hash = ? LIMIT 1`);
     const latestNewsIdStmt = db.prepare(`SELECT id FROM news ORDER BY id DESC LIMIT 1`);
+    const lastNewsStmt = db.prepare(`SELECT id, text FROM news ORDER BY id DESC LIMIT ?`);
 
     return {
         raw: db,
@@ -109,6 +110,12 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         // NEW: есть ли уже запись с таким хешем?
         hasNewsHash(hash: string): boolean {
             return !!newsHasHashStmt.get(hash);
+        },
+
+        // NEW: последние N новостей (по id DESC)
+        getLastNews(limit: number): Array<{ id: number; text: string }> {
+            const lim = Math.max(1, Math.min(100, Math.floor(Number(limit)) || 10));
+            return lastNewsStmt.all(lim) as Array<{ id: number; text: string }>;
         },
     };
 }

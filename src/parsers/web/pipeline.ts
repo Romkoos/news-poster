@@ -6,6 +6,7 @@ import { buildQueue } from './extractQueue';
 import { enrichItems } from './enrichItems';
 import { loadFiltersBundle, isExcludedByAuthor, decideAction } from './filters';
 import { hasDuplicate, handleModeration, handlePublish } from './process';
+import { compareArrays } from '../../shared/compareArrays';
 
 export async function webParser(config: ReturnType<typeof import('../../shared/config').readAppEnv>) {
   const db = initDb();
@@ -101,6 +102,23 @@ export async function webParser(config: ReturnType<typeof import('../../shared/c
           await page.waitForTimeout(100);
         }
         continue;
+      }
+
+      // Similarity check with last 10 published news (word-by-word positional comparison)
+      try {
+        const recent = db.getLastNews(10);
+        const incomingWords = String(q.textHe || '').trim().split(/\s+/).filter(Boolean);
+        for (const r of recent) {
+          const words = String(r.text || '').trim().split(/\s+/).filter(Boolean);
+          const score = compareArrays(incomingWords, words);
+
+          if (score >= 75) {
+            // As requested: output the id of the similar news to console
+            logWarn('r.id:', r.id);
+          }
+        }
+      } catch (e) {
+        logWarn('(WEB) Similarity check failed (continue anyway):', e);
       }
 
       try {
