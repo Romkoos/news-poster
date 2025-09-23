@@ -1,8 +1,8 @@
 import type { QueueItem, FiltersBundle } from './types';
 import { listFilters, getSettings } from '../../api/filters/db';
 
-export const EXCLUDED_AUTHORS = [""] as const;
-// export const EXCLUDED_AUTHORS = ["מבזקן 12", "דסק החוץ"] as const;
+// export const EXCLUDED_AUTHORS = [""] as const;
+export const EXCLUDED_AUTHORS = ["מבזקן 12", "דסק החוץ"] as const;
 
 export function loadFiltersBundle(): FiltersBundle {
   const allFilters = listFilters().filter(f => f.active);
