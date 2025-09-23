@@ -247,7 +247,7 @@ export async function editMessageText(
     await postJSON(url, {
         chat_id: chatId,
         message_id: messageId,
-        text: chunk + ' 1',
+        text: chunk,
         disable_web_page_preview: true,
         parse_mode: 'MarkdownV2',
     });
