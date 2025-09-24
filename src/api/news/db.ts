@@ -107,6 +107,13 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         ORDER BY ts ASC
     `);
 
+    // stats (hidden): rejected/filtered timestamps in range [fromTs, toTs)
+    const newsTsBetweenHiddenStmt = db.prepare(`
+        SELECT ts FROM news
+        WHERE ts >= ? AND ts < ? AND status IN ('rejected','filtered')
+        ORDER BY ts ASC
+    `);
+
     return {
         raw: db,
 
@@ -210,6 +217,13 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         getTimestampsBetween(fromTs: number, toTs: number): number[] {
             if (!Number.isFinite(fromTs) || !Number.isFinite(toTs)) return [];
             const rows = newsTsBetweenStmt.all(fromTs, toTs) as Array<{ ts: number }>;
+            return rows.map(r => r.ts);
+        },
+
+        // stats helper: hidden (rejected/filtered) timestamps between [fromTs, toTs)
+        getTimestampsBetweenHidden(fromTs: number, toTs: number): number[] {
+            if (!Number.isFinite(fromTs) || !Number.isFinite(toTs)) return [];
+            const rows = newsTsBetweenHiddenStmt.all(fromTs, toTs) as Array<{ ts: number }>;
             return rows.map(r => r.ts);
         }
     };
