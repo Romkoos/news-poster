@@ -167,7 +167,7 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         updateNewsModeratedByHash(hash: string, textTranslated: string, tgMessageId: number | null): void {
             db.prepare(`
                 UPDATE news
-                SET text = @text, status = 'moderated', tg_message_id = COALESCE(@tg_message_id, tg_message_id), ts = @ts, date = @date
+                SET text = @text, status = 'moderated', tg_message_id = COALESCE(@tg_message_id, tg_message_id)
                 WHERE hash = @hash
             `).run({ hash, text: textTranslated, tg_message_id: tgMessageId ?? null, ts: Date.now(), date: todayLocal() });
         },
