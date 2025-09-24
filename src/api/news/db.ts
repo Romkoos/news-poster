@@ -103,7 +103,7 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
     // stats: timestamps in range [fromTs, toTs)
     const newsTsBetweenStmt = db.prepare(`
         SELECT ts FROM news
-        WHERE ts >= ? AND ts < ? AND status IN ('published','moderated')
+        WHERE ts >= ? AND ts < ? AND status IN ('published','moderated', '')
         ORDER BY ts ASC
     `);
 
