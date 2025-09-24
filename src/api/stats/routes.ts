@@ -71,4 +71,17 @@ router.get('/24h-hidden', (_req, res) => {
     }
 });
 
+// NEW: per-day aggregator for last N days
+router.get('/daily', (req, res) => {
+    try {
+        const daysParam = Number((req.query as any).days);
+        const days = Number.isFinite(daysParam) ? Math.max(1, Math.min(366, Math.floor(daysParam))) : 7;
+        const rows = db.getAggregatorLastDays(days);
+        res.json(rows);
+    } catch (e) {
+        console.error('Error in /daily stats:', e);
+        res.status(500).json({ error: 'internal' });
+    }
+});
+
 export default router;

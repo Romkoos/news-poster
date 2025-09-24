@@ -44,6 +44,18 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
     if (!names.has('status')) {
         db.prepare(`ALTER TABLE news ADD COLUMN status TEXT NOT NULL DEFAULT 'published'`).run();
     }
+
+    // Aggregator table: per-day counters by status
+    db.prepare(`
+        CREATE TABLE IF NOT EXISTS aggregator (
+            date TEXT PRIMARY KEY,
+            published INTEGER NOT NULL DEFAULT 0,
+            rejected  INTEGER NOT NULL DEFAULT 0,
+            moderated INTEGER NOT NULL DEFAULT 0,
+            filtered  INTEGER NOT NULL DEFAULT 0
+        )
+    `).run();
+
     // ensure text can be NULL (older schema had NOT NULL). We won't alter constraint; just handle NULLs in code.
 
     const metaGet = db.prepare('SELECT value FROM meta WHERE key = ?');
@@ -112,6 +124,24 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         ORDER BY ts ASC
     `);
 
+    // aggregator statements
+    const aggUpsertStmt = db.prepare(`
+        INSERT INTO aggregator(date, published, rejected, moderated, filtered)
+        VALUES(@date, @published, @rejected, @moderated, @filtered)
+        ON CONFLICT(date) DO UPDATE SET
+          published = aggregator.published + excluded.published,
+          rejected  = aggregator.rejected  + excluded.rejected,
+          moderated = aggregator.moderated + excluded.moderated,
+          filtered  = aggregator.filtered  + excluded.filtered
+    `);
+
+    const aggRangeStmt = db.prepare(`
+        SELECT date, published, rejected, moderated, filtered
+        FROM aggregator
+        WHERE date >= ? AND date <= ?
+        ORDER BY date ASC
+    `);
+
     return {
         raw: db,
 
@@ -144,9 +174,10 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
 
         // сохраняем оригинал и перевод (если есть), а также message_id и статус
         addNews(textOriginal: string, hash: string, ts: number = Date.now(), textTranslated?: string | null, tgMessageId?: number | null, status: 'published' | 'rejected' | 'moderated' | 'filtered' | 'review' = 'published'): void {
+            const date = todayLocal();
             newsInsert.run({
                 ts,
-                date: todayLocal(),
+                date,
                 hash,
                 text_original: textOriginal,
                 // fallback: keep compatibility with older DBs where text might be NOT NULL
@@ -154,6 +185,18 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
                 tg_message_id: tgMessageId ?? null,
                 status: status ?? 'published',
             });
+            // increment daily aggregator for tracked statuses
+            if (status === 'published' || status === 'rejected' || status === 'moderated' || status === 'filtered') {
+                try {
+                    aggUpsertStmt.run({
+                        date,
+                        published: status === 'published' ? 1 : 0,
+                        rejected:  status === 'rejected'  ? 1 : 0,
+                        moderated: status === 'moderated' ? 1 : 0,
+                        filtered:  status === 'filtered'  ? 1 : 0,
+                    });
+                } catch {}
+            }
         },
 
         // только опубликованные и модерированные за дату (для публичных выдач)
@@ -163,16 +206,39 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
 
         // обновить запись новости по хешу после модерации (обновляем текст, статус и message_id)
         updateNewsModeratedByHash(hash: string, textTranslated: string, tgMessageId: number | null): void {
-            db.prepare(`
+            const info = db.prepare(`
                 UPDATE news
                 SET text = @text, status = 'moderated', tg_message_id = COALESCE(@tg_message_id, tg_message_id)
                 WHERE hash = @hash
             `).run({ hash, text: textTranslated, tg_message_id: tgMessageId ?? null, ts: Date.now(), date: todayLocal() });
+            // increment aggregator for moderation action only if row was updated
+            if ((info as any)?.changes > 0) {
+                try {
+                    aggUpsertStmt.run({
+                        date: todayLocal(),
+                        published: 0,
+                        rejected: 0,
+                        moderated: 1,
+                        filtered: 0,
+                    });
+                } catch {}
+            }
         },
 
         // установить статус по хешу
         setStatusByHash(hash: string, status: 'published' | 'rejected' | 'moderated' | 'filtered' | 'review'): void {
-            db.prepare(`UPDATE news SET status = ? WHERE hash = ?`).run(status, hash);
+            const info = db.prepare(`UPDATE news SET status = ? WHERE hash = ?`).run(status, hash);
+            if ((info as any)?.changes > 0 && (status === 'published' || status === 'rejected' || status === 'moderated' || status === 'filtered')) {
+                try {
+                    aggUpsertStmt.run({
+                        date: todayLocal(),
+                        published: status === 'published' ? 1 : 0,
+                        rejected:  status === 'rejected'  ? 1 : 0,
+                        moderated: status === 'moderated' ? 1 : 0,
+                        filtered:  status === 'filtered'  ? 1 : 0,
+                    });
+                } catch {}
+            }
         },
 
         // точечное обновление message_id при необходимости
@@ -223,6 +289,41 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
             if (!Number.isFinite(fromTs) || !Number.isFinite(toTs)) return [];
             const rows = newsTsBetweenHiddenStmt.all(fromTs, toTs) as Array<{ ts: number }>;
             return rows.map(r => r.ts);
+        },
+
+        // aggregator: manual increment if needed by external code
+        incAggregator(status: 'published' | 'rejected' | 'moderated' | 'filtered', date?: string): void {
+            const d = date || todayLocal();
+            try {
+                aggUpsertStmt.run({
+                    date: d,
+                    published: status === 'published' ? 1 : 0,
+                    rejected:  status === 'rejected'  ? 1 : 0,
+                    moderated: status === 'moderated' ? 1 : 0,
+                    filtered:  status === 'filtered'  ? 1 : 0,
+                });
+            } catch {}
+        },
+
+        // aggregator: get last N days with zero-filling
+        getAggregatorLastDays(days: number): Array<{ date: string; published: number; rejected: number; moderated: number; filtered: number }> {
+            const n = Math.max(1, Math.min(366, Math.floor(Number(days)) || 1));
+            const dates: string[] = [];
+            const base = new Date();
+            for (let i = n - 1; i >= 0; i--) {
+                const d = new Date(base);
+                d.setHours(0,0,0,0);
+                d.setDate(d.getDate() - i);
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                dates.push(`${yyyy}-${mm}-${dd}`);
+            }
+            const start = dates[0];
+            const end = dates[dates.length - 1];
+            const rows = aggRangeStmt.all(start, end) as Array<{ date: string; published: number; rejected: number; moderated: number; filtered: number }>;
+            const map = new Map(rows.map(r => [r.date, r]));
+            return dates.map(date => map.get(date) || { date, published: 0, rejected: 0, moderated: 0, filtered: 0 });
         }
     };
 }
