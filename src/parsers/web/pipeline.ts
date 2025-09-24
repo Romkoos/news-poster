@@ -66,6 +66,12 @@ export async function webParser(config: ReturnType<typeof import('../../shared/c
       const excl = await isExcludedByAuthor(q);
       if (excl.excluded) {
         log(`(WEB) Skipping by excluded author: "${excl.headerName}" (index=${q.index})`);
+        try {
+          db.addNews(q.textHe, q.hash, Date.now(), null, null, 'filtered');
+          lastBoundaryHash = q.hash;
+        } catch (e) {
+          logWarn('(WEB) db.addNews (filtered by author) failed:', e);
+        }
         if (q.height > 0) {
           await page.mouse.wheel(0, q.height);
           await page.waitForTimeout(100);
@@ -77,6 +83,11 @@ export async function webParser(config: ReturnType<typeof import('../../shared/c
 
       if (decision.action === 'reject') {
         log(`(WEB) Reject by filter: ${decision.winnerId || '<default>'} (index=${q.index})`);
+        try {
+          db.addNews(q.textHe, q.hash, Date.now(), null, null, 'filtered');
+        } catch (e) {
+          logWarn('(WEB) db.addNews (filtered by filter) failed:', e);
+        }
         lastBoundaryHash = q.hash;
         if (q.height > 0) {
           await page.mouse.wheel(0, q.height);

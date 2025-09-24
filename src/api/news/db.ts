@@ -27,7 +27,8 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
                                             hash  TEXT    NOT NULL UNIQUE,
                                             text_original TEXT,
                                             text  TEXT,
-                                            tg_message_id INTEGER
+                                            tg_message_id INTEGER,
+                                            status TEXT NOT NULL DEFAULT 'published'
         )
     `).run();
 
@@ -40,6 +41,9 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
     if (!names.has('tg_message_id')) {
         db.prepare(`ALTER TABLE news ADD COLUMN tg_message_id INTEGER`).run();
     }
+    if (!names.has('status')) {
+        db.prepare(`ALTER TABLE news ADD COLUMN status TEXT NOT NULL DEFAULT 'published'`).run();
+    }
     // ensure text can be NULL (older schema had NOT NULL). We won't alter constraint; just handle NULLs in code.
 
     const metaGet = db.prepare('SELECT value FROM meta WHERE key = ?');
@@ -49,14 +53,15 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
     `);
 
     const newsInsert = db.prepare(`
-        INSERT INTO news(ts, date, hash, text_original, text, tg_message_id)
-        VALUES(@ts, @date, @hash, @text_original, @text, @tg_message_id)
+        INSERT INTO news(ts, date, hash, text_original, text, tg_message_id, status)
+        VALUES(@ts, @date, @hash, @text_original, @text, @tg_message_id, @status)
         ON CONFLICT(hash) DO UPDATE SET
           ts = excluded.ts,
           date = excluded.date,
           text_original = COALESCE(excluded.text_original, news.text_original),
           text = COALESCE(excluded.text, news.text),
-          tg_message_id = COALESCE(excluded.tg_message_id, news.tg_message_id)
+          tg_message_id = COALESCE(excluded.tg_message_id, news.tg_message_id),
+          status = COALESCE(excluded.status, news.status)
     `);
 
     const news = db.prepare(`
@@ -69,6 +74,13 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         SELECT id, ts, date, hash, COALESCE(text, text_original, '') as text
         FROM news
         WHERE date = ?
+        ORDER BY ts ASC
+    `);
+
+    const newsByDatePublic = db.prepare(`
+        SELECT id, ts, date, hash, COALESCE(text, text_original, '') as text
+        FROM news
+        WHERE date = ? AND status IN ('published','moderated')
         ORDER BY ts ASC
     `);
 
@@ -91,7 +103,7 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
     // stats: timestamps in range [fromTs, toTs)
     const newsTsBetweenStmt = db.prepare(`
         SELECT ts FROM news
-        WHERE ts >= ? AND ts < ?
+        WHERE ts >= ? AND ts < ? AND status IN ('published','moderated')
         ORDER BY ts ASC
     `);
 
@@ -125,8 +137,8 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
             return Number.isFinite(id) && id > 0 ? id : 0;
         },
 
-        // сохраняем оригинал и перевод (если есть), а также message_id
-        addNews(textOriginal: string, hash: string, ts: number = Date.now(), textTranslated?: string | null, tgMessageId?: number | null): void {
+        // сохраняем оригинал и перевод (если есть), а также message_id и статус
+        addNews(textOriginal: string, hash: string, ts: number = Date.now(), textTranslated?: string | null, tgMessageId?: number | null, status: 'published' | 'rejected' | 'moderated' | 'filtered' | 'review' = 'published'): void {
             newsInsert.run({
                 ts,
                 date: todayLocal(),
@@ -135,7 +147,27 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
                 // fallback: keep compatibility with older DBs where text might be NOT NULL
                 text: textTranslated ?? textOriginal,
                 tg_message_id: tgMessageId ?? null,
+                status: status ?? 'published',
             });
+        },
+
+        // только опубликованные и модерированные за дату (для публичных выдач)
+        getPublicNewsFor(date: string) {
+            return newsByDatePublic.all(date) as Array<{ id: number; ts: number; date: string; hash: string; text: string }>;
+        },
+
+        // обновить запись новости по хешу после модерации (обновляем текст, статус и message_id)
+        updateNewsModeratedByHash(hash: string, textTranslated: string, tgMessageId: number | null): void {
+            db.prepare(`
+                UPDATE news
+                SET text = @text, status = 'moderated', tg_message_id = COALESCE(@tg_message_id, tg_message_id), ts = @ts, date = @date
+                WHERE hash = @hash
+            `).run({ hash, text: textTranslated, tg_message_id: tgMessageId ?? null, ts: Date.now(), date: todayLocal() });
+        },
+
+        // установить статус по хешу
+        setStatusByHash(hash: string, status: 'published' | 'rejected' | 'moderated' | 'filtered' | 'review'): void {
+            db.prepare(`UPDATE news SET status = ? WHERE hash = ?`).run(status, hash);
         },
 
         // точечное обновление message_id при необходимости

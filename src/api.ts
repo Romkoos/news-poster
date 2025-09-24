@@ -34,7 +34,7 @@ app.use('/api/stats', statsRoutes);
 // /api/news/today?limit=500&extended=1&all=1&onlyNew=1
 app.get('/api/news/today', (req, res) => {
     const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 500));
-    const rows = db.getNewsFor(todayIL()).slice(-limit); // уже по возрастанию ts → берём последние
+    const rows = db.getPublicNewsFor(todayIL()).slice(-limit); // уже по возрастанию ts → берём последние (только опубликованные/модерированные)
     // отдаём по убыванию времени (свежее первым)
     const all = rows.sort((a,b) => b.ts - a.ts);
 

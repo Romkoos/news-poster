@@ -75,9 +75,15 @@ router.post('/:id/approve', async (req, res) => {
       }
 
       try {
-        db.addNews(item.textHe, hash, Date.now(), textRu, messageId ?? null);
+        // обновляем существующую новость (созданную при постановке на модерацию), выставляя статус moderated
+        db.updateNewsModeratedByHash(hash, textRu, messageId ?? null);
       } catch {
-        // ignore persistence failure per simple behavior
+        try {
+          // fallback: если по каким-то причинам записи не было — создадим с нужным статусом
+          db.addNews(item.textHe, hash, Date.now(), textRu, messageId ?? null, 'moderated');
+        } catch {
+          // ignore persistence failure per simple behavior
+        }
       }
 
       return res.json({ ok: true });
@@ -90,12 +96,21 @@ router.post('/:id/approve', async (req, res) => {
   }
 });
 
-// POST /moderation/:id/reject -> delete only
+// POST /moderation/:id/reject -> mark news as rejected and delete moderation queue item
 router.post('/:id/reject', (req, res) => {
   try {
     const id = String(req.params.id);
     const item = getModerationById(id);
     if (!item) return res.status(404).json({ error: 'notfound' });
+
+    try {
+      const db = initDb();
+      const hash = sha1(item.textHe);
+      db.setStatusByHash(hash, 'rejected');
+    } catch {
+      // ignore db errors per simple behavior
+    }
+
     deleteModerationById(id);
     return res.json({ ok: true });
   } catch {

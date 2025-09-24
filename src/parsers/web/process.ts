@@ -32,8 +32,8 @@ export async function handleModeration(page: Page, q: EnrichedItem, db: NewsDb, 
     const media: string | undefined = videoOk ? String(videoUrlCandidate) : (imgUrl || undefined);
     insertModerationItem(q.textHe, filterId || ZERO_UUID, media);
     try {
-      // сохраняем только оригинальный текст (без перевода и без message_id)
-      db.addNews(q.textHe, q.hash, Date.now(), null, null);
+      // сохраняем только оригинальный текст (без перевода и без message_id), статус review
+      db.addNews(q.textHe, q.hash, Date.now(), null, null, 'review');
     } catch (e) {
       log('(WEB) db.addNews (moderation) failed:', e);
     }
