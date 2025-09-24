@@ -77,7 +77,8 @@ app.get('/api/news/today', (req, res) => {
 app.get('/api/news', (req, res) => {
     const date = String(req.query.date || todayIL());
     const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 500));
-    const rows = db.getNewsFor(date).slice(-limit);
+    // const rows = db.getNewsFor(date).slice(-limit);
+    const rows = db.getNews();
     res.json(rows.sort((a,b) => b.ts - a.ts));
 });
 

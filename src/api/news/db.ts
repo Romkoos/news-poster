@@ -59,6 +59,12 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
           tg_message_id = COALESCE(excluded.tg_message_id, news.tg_message_id)
     `);
 
+    const news = db.prepare(`
+        SELECT id, ts, date, hash, COALESCE(text, text_original, '') as text
+        FROM news
+        ORDER BY ts ASC
+    `);
+
     const newsByDate = db.prepare(`
         SELECT id, ts, date, hash, COALESCE(text, text_original, '') as text
         FROM news
@@ -139,6 +145,10 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
 
         getNewsFor(date: string) {
             return newsByDate.all(date) as Array<{ id: number; ts: number; date: string; hash: string; text: string }>;
+        },
+
+        getNews() {
+            return news.all() as Array<{ id: number; ts: number; date: string; hash: string; text: string }>;
         },
 
         purgeExceptToday(): void {
