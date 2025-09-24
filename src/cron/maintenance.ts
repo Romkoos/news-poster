@@ -16,18 +16,18 @@ async function collectStats(db: ReturnType<typeof initDb>) {
 }
 
 // --- step 2: очистка базы ---
-function purgeOldNews(db: ReturnType<typeof initDb>) {
-    log('Purging old news...');
-    db.raw.prepare(`
-        DELETE FROM news
-        WHERE id NOT IN (
-            SELECT id FROM news
-            ORDER BY id DESC
-            LIMIT 5
-        )
-    `).run();
-    log('Purge complete: kept last 5 records.');
-}
+// function purgeOldNews(db: ReturnType<typeof initDb>) {
+//     log('Purging old news...');
+//     db.raw.prepare(`
+//         DELETE FROM news
+//         WHERE id NOT IN (
+//             SELECT id FROM news
+//             ORDER BY id DESC
+//             LIMIT 5
+//         )
+//     `).run();
+//     log('Purge complete: kept last 5 records.');
+// }
 
 async function main() {
     const db = initDb();
@@ -39,11 +39,11 @@ async function main() {
             log('Stats collection skipped (ENABLE_STATS=false).');
         }
 
-        if (config.ENABLE_PURGE) {
-            purgeOldNews(db);
-        } else {
-            log('Purge skipped (ENABLE_PURGE=false).');
-        }
+        // if (config.ENABLE_PURGE) {
+        //     purgeOldNews(db);
+        // } else {
+        //     log('Purge skipped (ENABLE_PURGE=false).');
+        // }
     } catch (e) {
         log('Maintenance failed:', e);
     } finally {

@@ -17,22 +17,38 @@ module.exports = {
             env: { NODE_ENV: 'production' },
             log_date_format: 'YYYY-MM-DD HH:mm:ss.SSS'
         },
+        // {
+        //     name: 'news-maintenance',
+        //     script: 'node',
+        //     args: './node_modules/tsx/dist/cli.mjs src/cron/maintenance.ts',
+        //     cwd: __dirname,
+        //     cron_restart: '0 0 * * *',  // каждый день в 00:00
+        //     autorestart: false,
+        //     instances: 1,
+        //     time: true,
+        //     merge_logs: true,
+        //     env: {
+        //         NODE_ENV: 'production',
+        //         TZ: 'Asia/Jerusalem',
+        //         ENABLE_STATS: 'true',
+        //         ENABLE_PURGE: 'true'
+        //     },
+        //     log_date_format: 'YYYY-MM-DD HH:mm:ss.SSS'
+        // },
         {
-            name: 'news-maintenance',
+            name: 'news-poster-purge',
             script: 'node',
-            args: './node_modules/tsx/dist/cli.mjs src/cron/maintenance.ts',
+            args: './node_modules/tsx/dist/cli.mjs src/cron/purge.ts',
             cwd: __dirname,
-            cron_restart: '0 0 * * *',  // каждый день в 00:00
+
+            cron_restart: '0 0 */2 * *',  // каждый 2 дн в 00:00
             autorestart: false,
             instances: 1,
+
             time: true,
             merge_logs: true,
-            env: {
-                NODE_ENV: 'production',
-                TZ: 'Asia/Jerusalem',
-                ENABLE_STATS: 'true',
-                ENABLE_PURGE: 'true'
-            },
+
+            env: { NODE_ENV: 'production', TZ: 'Asia/Jerusalem' }, // Израильское время
             log_date_format: 'YYYY-MM-DD HH:mm:ss.SSS'
         },
         {
