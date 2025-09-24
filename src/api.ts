@@ -7,6 +7,7 @@ const app = express();
 const db = initDb();
 import usersRoutes from './api/users/routes';
 import filtersRoutes from './api/filters/routes';
+import statsRoutes from './api/stats/routes';
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
@@ -27,6 +28,8 @@ function todayIL(): string {
 app.get('/api/health', (_req, res) => {
     res.json({ ok: true });
 });
+
+app.use('/api/stats', statsRoutes);
 
 // /api/news/today?limit=500&extended=1&all=1&onlyNew=1
 app.get('/api/news/today', (req, res) => {

@@ -82,6 +82,13 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         UPDATE news SET tg_message_id = @tg_message_id WHERE hash = @hash
     `);
 
+    // stats: timestamps in range [fromTs, toTs)
+    const newsTsBetweenStmt = db.prepare(`
+        SELECT ts FROM news
+        WHERE ts >= ? AND ts < ?
+        ORDER BY ts ASC
+    `);
+
     return {
         raw: db,
 
@@ -158,6 +165,15 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
             const row = tgMsgIdByIdStmt.get(id) as { tg_message_id?: number } | undefined;
             const mid = row?.tg_message_id;
             return (typeof mid === 'number' && Number.isFinite(mid) && mid > 0) ? Math.floor(mid) : null;
+        },
+
+        // stats helper: timestamps between [fromTs, toTs)
+        getTimestampsBetween(fromTs: number, toTs: number): number[] {
+            const a = Math.floor(Number(fromTs));
+            const b = Math.floor(Number(toTs));
+            if (!Number.isFinite(a) || !Number.isFinite(b)) return [];
+            const rows = newsTsBetweenStmt.all(a, b) as Array<{ ts: number }>;
+            return rows.map(r => r.ts);
         },
     };
 }
