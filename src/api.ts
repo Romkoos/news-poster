@@ -33,8 +33,8 @@ app.use('/api/stats', statsRoutes);
 
 // /api/news/today?limit=500&extended=1&all=1&onlyNew=1
 app.get('/api/news/today', (req, res) => {
-    const rows = db.getNews(); // уже по возрастанию ts → берём последние
-    console.log(rows)
+    const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 500));
+    const rows = db.getNewsFor(todayIL()).slice(-limit); // уже по возрастанию ts → берём последние
     // отдаём по убыванию времени (свежее первым)
     const all = rows.sort((a,b) => b.ts - a.ts);
 
@@ -76,9 +76,8 @@ app.get('/api/news/today', (req, res) => {
 app.get('/api/news', (req, res) => {
     const date = String(req.query.date || todayIL());
     const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 500));
-    // const rows = db.getNewsFor(date).slice(-limit);
-    const rows = db.getNews();
-    console.log(rows)
+    const rows = db.getNewsFor(date).slice(-limit);
+
     res.json(rows.sort((a,b) => b.ts - a.ts));
 });
 

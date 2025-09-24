@@ -147,9 +147,6 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
             return newsByDate.all(date) as Array<{ id: number; ts: number; date: string; hash: string; text: string }>;
         },
 
-        getNews() {
-            return news.all() as Array<{ id: number; ts: number; date: string; hash: string; text: string }>;
-        },
 
         purgeExceptToday(): void {
             purgeNotDate.run(todayLocal());
