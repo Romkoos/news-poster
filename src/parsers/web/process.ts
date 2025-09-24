@@ -68,7 +68,7 @@ export async function handlePublish(page: Page, q: EnrichedItem, config: AppConf
     }
 
     try {
-      db.addNews(q.textHe, q.hash, Date.now(), textRu, messageId ?? null);
+      db.addNews(q.textHe, q.hash, Date.now(), textRu, messageId ?? null, 'published');
     } catch (e) {
       log('(WEB) db.addNews failed:', e);
     }
@@ -98,7 +98,7 @@ export async function handleEditExisting(page: Page, q: EnrichedItem, config: Ap
 
     // Фиксируем новый хеш в БД, привязывая к тому же message_id
     try {
-      db.addNews(q.textHe, q.hash, Date.now(), textRu, msgId);
+      db.addNews(q.textHe, q.hash, Date.now(), textRu, msgId, 'published');
     } catch (e) {
       log('(WEB) db.addNews (edit) failed:', e);
     }
