@@ -10,10 +10,9 @@ router.get('/24h', (_req, res) => {
         const HOUR = 60 * 60 * 1000;
         const tz = process.env.STATS_TZ || 'Asia/Jerusalem';
 
-        // Получаем конец окна — начало текущего часа в нужной зоне, но приводим к UTC!
+        // Конец окна — текущий момент в выбранной таймзоне (приводим к UTC)
         const end = DateTime.now()
             .setZone(tz)
-            .startOf('hour')
             .toUTC();
 
         const start = end.minus({ hours: 24 });
@@ -44,10 +43,9 @@ router.get('/24h-hidden', (_req, res) => {
         const HOUR = 60 * 60 * 1000;
         const tz = process.env.STATS_TZ || 'Asia/Jerusalem';
 
-        // Получаем конец окна — начало текущего часа в нужной зоне, но приводим к UTC!
+        // Конец окна — текущий момент в выбранной таймзоне (приводим к UTC)
         const end = DateTime.now()
             .setZone(tz)
-            .startOf('hour')
             .toUTC();
 
         const start = end.minus({ hours: 24 });

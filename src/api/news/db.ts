@@ -56,8 +56,6 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         INSERT INTO news(ts, date, hash, text_original, text, tg_message_id, status)
         VALUES(@ts, @date, @hash, @text_original, @text, @tg_message_id, @status)
         ON CONFLICT(hash) DO UPDATE SET
-          ts = excluded.ts,
-          date = excluded.date,
           text_original = COALESCE(excluded.text_original, news.text_original),
           text = COALESCE(excluded.text, news.text),
           tg_message_id = COALESCE(excluded.tg_message_id, news.tg_message_id),
