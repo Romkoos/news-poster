@@ -32,10 +32,9 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/stats', statsRoutes);
 
 // /api/news/today?limit=500&extended=1&all=1&onlyNew=1
-app.get('/api/news/today', (req, res) => {
-    const limit = Math.max(1, Math.min(1000, Number(req.query.limit) || 500));
-    const rows = db.getNewsFor(todayIL()).slice(-limit); // уже по возрастанию ts → берём последние
-
+app.get('/api/news/today', (req, res) => {git
+    const rows = db.getNews(); // уже по возрастанию ts → берём последние
+    console.log(rows)
     // отдаём по убыванию времени (свежее первым)
     const all = rows.sort((a,b) => b.ts - a.ts);
 
