@@ -78,7 +78,7 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
     `);
 
     const newsByDatePublic = db.prepare(`
-        SELECT id, ts, date, hash, COALESCE(text, text_original, '') as text
+        SELECT id, ts, date, hash, status, COALESCE(text, text_original, '') as text
         FROM news
         WHERE date = ? AND status IN ('published','moderated')
         ORDER BY ts ASC
@@ -103,7 +103,7 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
     // stats: timestamps in range [fromTs, toTs)
     const newsTsBetweenStmt = db.prepare(`
         SELECT ts FROM news
-        WHERE ts >= ? AND ts < ? AND status IN ('published','moderated', '')
+        WHERE ts >= ? AND ts < ? AND status IN ('published','moderated')
         ORDER BY ts ASC
     `);
 
@@ -160,7 +160,7 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
 
         // только опубликованные и модерированные за дату (для публичных выдач)
         getPublicNewsFor(date: string) {
-            return newsByDatePublic.all(date) as Array<{ id: number; ts: number; date: string; hash: string; text: string }>;
+            return newsByDatePublic.all(date) as Array<{ id: number; ts: number; date: string; hash: string; status: string; text: string }>;
         },
 
         // обновить запись новости по хешу после модерации (обновляем текст, статус и message_id)
