@@ -32,7 +32,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/stats', statsRoutes);
 
 // /api/news/today?limit=500&extended=1&all=1&onlyNew=1
-app.get('/api/news/today', (req, res) => {git
+app.get('/api/news/today', (req, res) => {
     const rows = db.getNews(); // уже по возрастанию ts → берём последние
     console.log(rows)
     // отдаём по убыванию времени (свежее первым)
