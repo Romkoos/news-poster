@@ -179,11 +179,9 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
 
         // stats helper: timestamps between [fromTs, toTs)
         getTimestampsBetween(fromTs: number, toTs: number): number[] {
-            const a = Math.floor(Number(fromTs));
-            const b = Math.floor(Number(toTs));
-            if (!Number.isFinite(a) || !Number.isFinite(b)) return [];
-            const rows = newsTsBetweenStmt.all(a, b) as Array<{ ts: number }>;
+            if (!Number.isFinite(fromTs) || !Number.isFinite(toTs)) return [];
+            const rows = newsTsBetweenStmt.all(fromTs, toTs) as Array<{ ts: number }>;
             return rows.map(r => r.ts);
-        },
+        }
     };
 }
