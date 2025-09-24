@@ -57,6 +57,9 @@ export type AppConfig = {
     DEBUG_TRACE: boolean;
     DEBUG_SCREENSHOTS: boolean;
     DEBUG_VISUALS: boolean; // overlays/highlights/bboxes
+
+    ENABLE_STATS: boolean;
+    ENABLE_PURGE: boolean;
 };
 
 /**
@@ -91,5 +94,8 @@ export function readAppEnv(): AppConfig {
         DEBUG_TRACE: (config('DEBUG_TRACE', false) === '1'),
         DEBUG_SCREENSHOTS: (config('DEBUG_SCREENSHOTS', false) === '1'),
         DEBUG_VISUALS: (config('DEBUG_VISUALS', false) === '1'),
+
+        ENABLE_PURGE: (config('ENABLE_PURGE', false) === '1'),
+        ENABLE_STATS: (config('ENABLE_STATS', false) === '1'),
     };
 }
