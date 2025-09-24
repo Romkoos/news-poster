@@ -8,11 +8,19 @@ const db = initDb();
 router.get('/24h', (_req, res) => {
   try {
     const HOUR = 60 * 60 * 1000;
-    const now = new Date();
-    // округляем до начала текущего часа (например, 13:22 → 13:00)
-    const end = new Date(now.getTime());
-    end.setMinutes(0, 0, 0);
-    const endMs = end.getTime();
+    // Выравниваем до начала ТЕКУЩЕГО часа в заданной таймзоне (по умолчанию — Азия/Иерусалим)
+    const tz = process.env.STATS_TZ || 'Asia/Jerusalem';
+    const now = Date.now();
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date(now));
+    const mm = Number(parts.find(p => p.type === 'minute')?.value || '0');
+    const ss = Number(parts.find(p => p.type === 'second')?.value || '0');
+    const endMs = now - ((mm * 60 + ss) * 1000 + (now % 1000));
     const startMs = endMs - 24 * HOUR;
 
     // достаём метки времени за интервал [startMs, endMs)
