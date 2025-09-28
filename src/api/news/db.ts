@@ -56,6 +56,16 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         )
     `).run();
 
+    // NEW: Filter aggregator table — per-day counters by filter note (including EXCLUDED_AUTHORS and moderation)
+    db.prepare(`
+        CREATE TABLE IF NOT EXISTS filter_aggregator (
+            date TEXT NOT NULL,
+            note TEXT NOT NULL,
+            hits INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY(date, note)
+        )
+    `).run();
+
     // ensure text can be NULL (older schema had NOT NULL). We won't alter constraint; just handle NULLs in code.
 
     const metaGet = db.prepare('SELECT value FROM meta WHERE key = ?');
@@ -140,6 +150,20 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
         FROM aggregator
         WHERE date >= ? AND date <= ?
         ORDER BY date ASC
+    `);
+
+    // NEW: filter aggregator statements
+    const filtAggUpsertStmt = db.prepare(`
+        INSERT INTO filter_aggregator(date, note, hits)
+        VALUES(@date, @note, @hits)
+        ON CONFLICT(date, note) DO UPDATE SET
+          hits = filter_aggregator.hits + excluded.hits
+    `);
+
+    const filtAggRangeStmt = db.prepare(`
+        SELECT date, note, hits FROM filter_aggregator
+        WHERE date >= ? AND date <= ?
+        ORDER BY date ASC, hits DESC
     `);
 
     return {
@@ -324,6 +348,41 @@ export function initDb(dbPath = path.resolve('data', 'news.db')) {
             const rows = aggRangeStmt.all(start, end) as Array<{ date: string; published: number; rejected: number; moderated: number; filtered: number }>;
             const map = new Map(rows.map(r => [r.date, r]));
             return dates.map(date => map.get(date) || { date, published: 0, rejected: 0, moderated: 0, filtered: 0 });
+        },
+
+        // NEW: log a filter hit by note (defaults to 'UNKNOWN')
+        logFilterHit(note: string, date?: string): void {
+            const safeNote = String(note || 'UNKNOWN').slice(0, 200);
+            const d = date || todayLocal();
+            try {
+                filtAggUpsertStmt.run({ date: d, note: safeNote, hits: 1 });
+            } catch {}
+        },
+
+        // NEW: get last N days of filter hits grouped by note
+        getFilterHitsLastDays(days: number): Array<{ date: string; items: Array<{ note: string; count: number }> }> {
+            const n = Math.max(1, Math.min(366, Math.floor(Number(days)) || 1));
+            const dates: string[] = [];
+            const base = new Date();
+            for (let i = n - 1; i >= 0; i--) {
+                const d = new Date(base);
+                d.setHours(0,0,0,0);
+                d.setDate(d.getDate() - i);
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                dates.push(`${yyyy}-${mm}-${dd}`);
+            }
+            const start = dates[0];
+            const end = dates[dates.length - 1];
+            const rows = filtAggRangeStmt.all(start, end) as Array<{ date: string; note: string; hits: number }>;
+            const byDate = new Map<string, Array<{ note: string; count: number }>>();
+            for (const r of rows) {
+                const arr = byDate.get(r.date) || [];
+                arr.push({ note: r.note, count: r.hits });
+                byDate.set(r.date, arr);
+            }
+            return dates.map(date => ({ date, items: byDate.get(date) || [] }));
         }
     };
 }

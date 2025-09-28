@@ -84,4 +84,17 @@ router.get('/daily', (req, res) => {
     }
 });
 
+// NEW: per-day filter hits by note
+router.get('/filters/daily', (req, res) => {
+    try {
+        const daysParam = Number((req.query as any).days);
+        const days = Number.isFinite(daysParam) ? Math.max(1, Math.min(366, Math.floor(daysParam))) : 7;
+        const rows = db.getFilterHitsLastDays(days);
+        res.json(rows);
+    } catch (e) {
+        console.error('Error in /filters/daily stats:', e);
+        res.status(500).json({ error: 'internal' });
+    }
+});
+
 export default router;

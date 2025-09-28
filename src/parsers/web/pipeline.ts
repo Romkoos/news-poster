@@ -6,6 +6,7 @@ import { buildQueue } from './extractQueue';
 import { enrichItems } from './enrichItems';
 import { loadFiltersBundle, isExcludedByAuthor, decideAction } from './filters';
 import { hasDuplicate, handleModeration, handlePublish, handleEditExisting } from './process';
+import { getFilterById } from '../../api/filters/db';
 import { compareArrays } from '../../shared/compareArrays';
 
 export async function webParser(config: ReturnType<typeof import('../../shared/config').readAppEnv>) {
@@ -68,6 +69,7 @@ export async function webParser(config: ReturnType<typeof import('../../shared/c
         log(`(WEB) Skipping by excluded author: "${excl.headerName}" (index=${q.index})`);
         try {
           db.addNews(q.textHe, q.hash, Date.now(), null, null, 'filtered');
+          try { db.logFilterHit('EXCLUDED_AUTHORS'); } catch {}
           lastBoundaryHash = q.hash;
         } catch (e) {
           logWarn('(WEB) db.addNews (filtered by author) failed:', e);
@@ -85,6 +87,14 @@ export async function webParser(config: ReturnType<typeof import('../../shared/c
         log(`(WEB) Reject by filter: ${decision.winnerId || '<default>'} (index=${q.index})`);
         try {
           db.addNews(q.textHe, q.hash, Date.now(), null, null, 'filtered');
+          try {
+            let note = 'DEFAULT:reject';
+            if (decision.winnerId) {
+              const f = getFilterById(decision.winnerId);
+              note = (f?.notes && f.notes.trim()) || f?.keyword || decision.winnerId || note;
+            }
+            db.logFilterHit(note);
+          } catch {}
         } catch (e) {
           logWarn('(WEB) db.addNews (filtered by filter) failed:', e);
         }
@@ -97,6 +107,14 @@ export async function webParser(config: ReturnType<typeof import('../../shared/c
       }
 
       if (decision.action === 'moderation') {
+        try {
+          let note = 'DEFAULT:moderation';
+          if (decision.winnerId) {
+            const f = getFilterById(decision.winnerId);
+            note = (f?.notes && f.notes.trim()) || f?.keyword || decision.winnerId || note;
+          }
+          db.logFilterHit(note);
+        } catch {}
         const res = await handleModeration(page, q, db, decision.winnerId);
         if (res.boundaryHash) lastBoundaryHash = res.boundaryHash;
         if (q.height > 0) {
